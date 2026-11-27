@@ -3,7 +3,7 @@ layout: about
 title: 中文
 permalink: /zh/
 nav: false
-subtitle: 腾讯 IEG Global（伦敦）Senior Staff Researcher，负责游戏发行 AI agent 平台 DataBrain。
+subtitle: 腾讯 IEG Global（伦敦）Senior Staff Researcher，在做 Unreal Engine + AI 的游戏研发提效。之前负责游戏发行 AI agent 平台 DataBrain。
 
 profile:
   align: right
@@ -11,7 +11,7 @@ profile:
   image_circular: false
   more_info: >
     <p>腾讯 IEG Global · 伦敦</p>
-    <p>AI agent · 游戏数据 · NLP</p>
+    <p>AI agent · Unreal Engine · 游戏数据</p>
     <p><a href="mailto:donxhuang@tencent.com">donxhuang@tencent.com</a></p>
 
 selected_papers: false
@@ -24,7 +24,9 @@ latest_posts:
   enabled: false
 ---
 
-我负责 DataBrain，腾讯全球游戏发行团队每天用来查游戏数据的平台。平台上的 AI agent 让大家用自然语言提问，直接拿到图表、数据来源和自动生成的看板。我是腾讯 IEG Global（伦敦）的 Senior Staff Researcher，2023 年起和全球发行团队一起工作，同时在腾讯内部担任 AI agent 开发导师。
+我是腾讯 IEG Global（伦敦）的 Senior Staff Researcher。2026 年 8 月起在 AI Accelerator 团队，尝试把 AI 用到 Unreal Engine 里，给游戏研发提效。
+
+在这之前我负责 DataBrain，腾讯全球游戏发行团队每天用来查游戏数据的平台。平台上的 AI agent 让大家用自然语言提问，直接拿到图表、数据来源和自动生成的看板。我也在腾讯内部担任 AI agent 开发导师。
 
 来伦敦之前，我在腾讯互动娱乐事业群三年，从 0 搭建海外游戏数据平台；再之前在京东做京东智能音箱的 NLP。硕士毕业于帝国理工学院 Computing Science，本科毕业于上海大学。
 
@@ -36,7 +38,7 @@ latest_posts:
       <span class="work-title">DataBrain AI agent</span>
       <span class="work-desc">用自然语言查询市场、Steam、评论和达人数据，自动给出图表和看板。</span>
     </div>
-    <span class="work-meta">腾讯 IEG Global<br>2023 – 至今</span>
+    <span class="work-meta">腾讯 IEG Global<br>2023 – 2026</span>
   </a>
   <a class="work-item" href="{{ '/zh/projects/overseas-games-data/' | relative_url }}">
     <div class="work-main">

@@ -14,7 +14,7 @@ A talk at Kingston University during Tencent’s campus visit on 7 October 2026:
 
 **The bottleneck is access.** That data is scattered across tools, defined differently by different teams, and slow to query when every follow-up waits on SQL.
 
-**DataBrain makes the data askable.** DataBrain is the platform I lead for Tencent’s global publishing teams. Its AI agent reads a plain-English question, fetches the right sources (market data, Steam, reviews, creators, internal data), connects the signals, and answers with charts, sources and generated dashboards.
+**DataBrain makes the data askable.** DataBrain is the platform I led for Tencent’s global publishing teams. Its AI agent reads a plain-English question, fetches the right sources (market data, Steam, reviews, creators, internal data), connects the signals, and answers with charts, sources and generated dashboards.
 
 **Case study: PEAK.** How did a $7.99 co-op climbing game reach about 170,000 concurrent players? Four questions to the agent:
 

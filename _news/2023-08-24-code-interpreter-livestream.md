@@ -10,6 +10,12 @@ zh_url: /zh/news/2023-08-24-code-interpreter-livestream/
 
 On the evening of 24 August 2023 I gave a livestream on ChatGPT Code Interpreter for Tencent Tech Engineering, shown on the Tencent Programmer channel on WeChat Channels and on Zhihu. It ran for an hour and a half, and about 5,600 people watched.
 
+<div class="row justify-content-center my-4">
+  <div class="col-12 col-md-10">
+    {% include figure.liquid loading="eager" path="assets/img/code-interpreter-2023.jpg" alt="Title slide: ChatGPT Code Interpreter, Tencent Tech Engineering, 24 August 2023" class="img-fluid rounded z-depth-1" %}
+  </div>
+</div>
+
 The talk covered how Code Interpreter works and how to build an open-source version:
 
 - ChatGPT Code Interpreter and data analysis driven by AI tools

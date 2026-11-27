@@ -9,7 +9,7 @@ description: CV of Dongxiao Huang, Senior Staff Researcher at Tencent IEG Global
 
 <div class="cv">
 
-<p class="cv-lead">I lead DataBrain, the data and AI agent platform for Tencent's global game publishing teams. Six years at Tencent on games data and AI. MSc Computing Science, Imperial College London.</p>
+<p class="cv-lead">Working on Unreal Engine and AI to make game development faster, in Tencent's AI Accelerator team. Before that I led DataBrain, the data and AI agent platform for Tencent's global game publishing teams. Six years at Tencent on games data and AI. MSc Computing Science, Imperial College London.</p>
 <p class="cv-contact"><a href="mailto:donxhuang@tencent.com">donxhuang@tencent.com</a><span class="sep">·</span>London, UK<span class="sep">·</span><a href="https://github.com/dongxiaohuang">GitHub</a><span class="sep">·</span><a href="https://www.linkedin.com/in/dongxiao-huang-b2b835151">LinkedIn</a></p>
 
 <h2 class="cv-section">Experience</h2>
@@ -19,7 +19,9 @@ description: CV of Dongxiao Huang, Senior Staff Researcher at Tencent IEG Global
     <div class="cv-body">
       <div class="cv-title">Senior Staff Researcher</div>
       <div class="cv-org">Tencent IEG Global</div>
-      <p>Lead of DataBrain, the AI agent platform the global publishing teams use daily. Mentor for AI agent development inside Tencent.</p>
+      <p>Since August 2026, in the AI Accelerator team: AI in Unreal Engine to make game development faster.</p>
+      <p>2023 to 2026: led <a href="{{ '/projects/games-data-agent/' | relative_url }}">DataBrain</a>, the AI agent platform the global publishing teams use daily.</p>
+      <p>Mentor for AI agent development inside Tencent.</p>
       <p class="cv-note">Moved to London as Senior Researcher; promoted to Staff Researcher in March 2024 and Senior Staff Researcher in August 2025.</p>
     </div>
   </div>

@@ -2,7 +2,7 @@
 layout: about
 title: About
 permalink: /
-subtitle: Senior Staff Researcher at Tencent IEG Global, London. I lead DataBrain, the AI agent platform for game publishing.
+subtitle: Senior Staff Researcher at Tencent IEG Global, London, working on Unreal Engine and AI for game development. Before that I led DataBrain, the AI agent platform for game publishing.
 
 profile:
   align: right
@@ -10,7 +10,7 @@ profile:
   image_circular: false
   more_info: >
     <p>Tencent IEG Global, London</p>
-    <p>AI agents · games data · NLP</p>
+    <p>AI agents · Unreal Engine · games data</p>
     <p><a href="mailto:donxhuang@tencent.com">donxhuang@tencent.com</a></p>
 
 selected_papers: false
@@ -27,7 +27,9 @@ latest_posts:
   limit: 3
 ---
 
-I lead DataBrain, the platform Tencent’s global game publishing teams use every day to get at games data. Its AI agents let people ask questions in plain English and get back charts, sources and generated dashboards. I am a Senior Staff Researcher at Tencent IEG Global in London, where I have worked with the publishing team since 2023, and I mentor AI agent development inside Tencent.
+I am a Senior Staff Researcher at Tencent IEG Global in London. Since August 2026 I have been in the AI Accelerator team, trying out AI in Unreal Engine to make game development faster.
+
+Before that I led DataBrain, the platform Tencent’s global game publishing teams use every day to get at games data. Its AI agents let people ask questions in plain English and get back charts, sources and generated dashboards. I also mentor AI agent development inside Tencent.
 
 Before London I spent three years in Tencent’s Interactive Entertainment Group building the overseas games data platform from scratch, and before Tencent I worked on NLP for the JD smart speaker at JD.com. I have an MSc in Computing Science from Imperial College London and a BEng from Shanghai University.
 
@@ -39,7 +41,7 @@ Before London I spent three years in Tencent’s Interactive Entertainment Group
       <span class="work-title">DataBrain AI agents</span>
       <span class="work-desc">Plain-English questions over market, Steam, review and creator data, answered with charts and generated dashboards.</span>
     </div>
-    <span class="work-meta">Tencent IEG Global<br>2023 – now</span>
+    <span class="work-meta">Tencent IEG Global<br>2023 – 2026</span>
   </a>
   <a class="work-item" href="{{ '/projects/overseas-games-data/' | relative_url }}">
     <div class="work-main">

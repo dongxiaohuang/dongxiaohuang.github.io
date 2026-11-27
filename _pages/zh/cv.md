@@ -8,7 +8,7 @@ nav: false
 
 <div class="cv">
 
-<p class="cv-lead">负责 DataBrain，腾讯全球游戏发行团队使用的数据与 AI agent 平台。在腾讯做了六年游戏数据和 AI。帝国理工学院 Computing Science 硕士。</p>
+<p class="cv-lead">在腾讯 AI Accelerator 团队做 Unreal Engine + AI，给游戏研发提效。之前负责 DataBrain，腾讯全球游戏发行团队使用的数据与 AI agent 平台。在腾讯做了六年游戏数据和 AI。帝国理工学院 Computing Science 硕士。</p>
 <p class="cv-contact"><a href="mailto:donxhuang@tencent.com">donxhuang@tencent.com</a><span class="sep">·</span>英国伦敦<span class="sep">·</span><a href="https://github.com/dongxiaohuang">GitHub</a><span class="sep">·</span><a href="https://www.linkedin.com/in/dongxiao-huang-b2b835151">LinkedIn</a></p>
 
 <h2 class="cv-section">工作经历</h2>
@@ -18,7 +18,9 @@ nav: false
     <div class="cv-body">
       <div class="cv-title">Senior Staff Researcher</div>
       <div class="cv-org">腾讯 IEG Global</div>
-      <p>负责 DataBrain，全球发行团队每天使用的 AI agent 平台。在腾讯内部担任 AI agent 开发导师。</p>
+      <p>2026.08 起在 AI Accelerator 团队，尝试 Unreal Engine + AI，给游戏研发提效。</p>
+      <p>2023 – 2026 负责 <a href="{{ '/zh/projects/games-data-agent/' | relative_url }}">DataBrain</a>，全球发行团队每天使用的 AI agent 平台。</p>
+      <p>在腾讯内部担任 AI agent 开发导师。</p>
       <p class="cv-note">以 Senior Researcher 调往伦敦，2024.03 晋升 Staff Researcher，2025.08 晋升 Senior Staff Researcher。</p>
     </div>
   </div>
