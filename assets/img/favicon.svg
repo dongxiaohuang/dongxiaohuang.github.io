@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#1d4e89"/>
-  <text x="32" y="42" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="27" font-weight="700" fill="#fbfaf7" letter-spacing="-1">DH</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
+  <rect width="320" height="320" rx="44" fill="#CCDEFB"/>
+  <path fill="#08090C" fill-rule="evenodd" d="M190 53a25 25 0 0 1 25 25v176a25 25 0 0 1-49 8 80 80 0 1 1 0-128V78a25 25 0 0 1 24-25ZM130 164a34 35 0 1 0 0 70 34 35 0 0 0 0-70Z"/>
+  <circle cx="254" cy="238" r="32" fill="#555DF8"/>
 </svg>

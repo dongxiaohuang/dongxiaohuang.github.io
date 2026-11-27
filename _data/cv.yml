@@ -25,6 +25,8 @@ cv:
         studyType: MSc
         start_date: 2017-09
         end_date: 2018-11
+        highlights:
+          - Graduated with Distinction.
 
       - institution: Shanghai University
         location: Shanghai, China
@@ -33,6 +35,8 @@ cv:
         studyType: BEng
         start_date: 2013-09
         end_date: 2017-07
+        highlights:
+          - Shanghai Outstanding Graduate, 2017.
 
     Experience:
       - company: Tencent, IEG Global

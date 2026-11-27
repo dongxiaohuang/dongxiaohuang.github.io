@@ -58,6 +58,7 @@ nav: false
     <div class="cv-body">
       <div class="cv-title">Computing Science 硕士</div>
       <div class="cv-org">帝国理工学院</div>
+      <p class="cv-note">Distinction 毕业，帝国理工硕士最高等级。</p>
     </div>
   </div>
   <div class="cv-item">
@@ -65,6 +66,7 @@ nav: false
     <div class="cv-body">
       <div class="cv-title">通信工程学士</div>
       <div class="cv-org">上海大学</div>
+      <p class="cv-note">上海市优秀毕业生（2017）。</p>
     </div>
   </div>
 </div>

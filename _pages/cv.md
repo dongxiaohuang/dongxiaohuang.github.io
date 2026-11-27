@@ -59,6 +59,7 @@ description: CV of Dongxiao Huang, Senior Staff Researcher at Tencent IEG Global
     <div class="cv-body">
       <div class="cv-title">MSc Computing Science</div>
       <div class="cv-org">Imperial College London</div>
+      <p class="cv-note">Graduated with Distinction.</p>
     </div>
   </div>
   <div class="cv-item">
@@ -66,6 +67,7 @@ description: CV of Dongxiao Huang, Senior Staff Researcher at Tencent IEG Global
     <div class="cv-body">
       <div class="cv-title">BEng Communication Engineering</div>
       <div class="cv-org">Shanghai University</div>
+      <p class="cv-note">Shanghai Outstanding Graduate, 2017.</p>
     </div>
   </div>
 </div>
