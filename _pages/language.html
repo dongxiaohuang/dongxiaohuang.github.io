@@ -17,6 +17,7 @@ sitemap: false
   var pages = {
     {%- for p in site.pages -%}{%- if p.url contains '.' -%}{%- continue -%}{%- endif -%}{{ p.url | jsonify }}: 1,{%- endfor -%}
     {%- for p in site.projects -%}{{ p.url | jsonify }}: 1,{%- endfor -%}
+    {%- for p in site.news -%}{{ p.url | jsonify }}: 1,{%- endfor -%}
   };
   var pairs = {
     {%- for e in site.data.published_essays.essays -%}{%- if e.live -%}{{ e.zh_permalink | jsonify }}: {{ e.en_permalink | jsonify }}, {{ e.en_permalink | jsonify }}: {{ e.zh_permalink | jsonify }},{%- endif -%}{%- endfor -%}

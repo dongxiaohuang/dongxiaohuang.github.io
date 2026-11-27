@@ -42,15 +42,18 @@ cv:
         summary: >-
           Lead of DataBrain, the AI agent platform the global publishing teams use daily.
           Mentor for AI agent development inside Tencent.
+        highlights:
+          - Moved to London as Senior Researcher, promoted to Staff Researcher in March 2024 and Senior Staff Researcher in August 2025.
 
       - company: Tencent, Interactive Entertainment Group
-        position: Algorithm Engineer, NLP
+        position: Senior Researcher, NLP
         location: Shenzhen, China
         start_date: 2020-08
         end_date: 2023-10
         summary: >-
           Built the overseas games data platform from scratch and led its NLP work.
         highlights:
+          - Joined as Researcher, promoted to Senior Researcher in March 2022.
           - Research with Tsinghua University published at ECAI 2023, SEKE 2023, CCKS 2021 and in Electronics.
 
       - company: South China University of Technology, School of Software Engineering
@@ -68,6 +71,51 @@ cv:
         start_date: 2018-11
         end_date: 2020-08
         summary: NLP for the JD smart speaker.
+
+    Awards:
+      - title: Outstanding performance rating, four times
+        awarder: Tencent
+        date: 2026-06
+        summary: Tencent's top performance rating, in H1 2023, H2 2024, H1 2025 and H1 2026.
+      - title: Annual Business Breakthrough Award
+        awarder: Tencent
+        date: 2025-12
+        summary: "Team award, twice: the _Delta Force_ joint project team, and the global game asset structuring project team."
+      - title: Sustainable Social Value Award
+        awarder: Tencent
+        date: 2025-12
+        summary: Team award, the Tencent SSV digital teaching joint project team.
+      - title: Outstanding Mentor of 2024
+        awarder: Tencent
+        date: 2025-06
+        summary: Tencent's annual award for mentors of new team members.
+      - title: Tencent Excellence in R&D Award
+        awarder: Tencent
+        date: 2024-12
+        summary: Team award, for putting AI applications to work in Tencent's overseas business.
+      - title: Annual Business Breakthrough Award
+        awarder: Tencent
+        date: 2024-12
+        summary: Team award, the _Delta Force_ joint project team.
+      - title: Tencent Micro-Innovation Award
+        awarder: Tencent
+        date: 2024-11
+        summary: "Team award for Level Infinite AI Translation, an AI translation engine built for games."
+      - title: Tencent Excellence in Operations Award
+        awarder: Tencent
+        date: 2023-12
+        summary: Team award, for building the overseas games data technology stack at IEG Global.
+      - title: Outstanding Contributor, first half of 2023
+        awarder: Tencent
+        date: 2023-06
+      - title: Tencent Sustainable Social Value Award
+        awarder: Tencent
+        date: 2023-06
+        summary: Team award, the Penguin Teaching programme, which brings technology to rural education.
+      - title: Tencent Open Source Collaboration Award
+        awarder: Tencent
+        date: 2021-12
+        summary: Team award, the TencentNLP Oteam.
 
     Publications:
       - title: Knowledge-augmented Few-shot Visual Relation Detection
@@ -204,3 +252,24 @@ cv:
           with a DataBrain case study on PEAK. Given during Tencent's campus visit.
         start_date: 2026-10-07
         end_date: 2026-10-07
+      - name: "Internal livestream: DataBrain Agent x WorkBuddy, Tencent Academy"
+        summary: >-
+          A livestream for Tencent staff, given as one of DataBrain's overseas data experts,
+          on packing a games data expert's know-how into an agent.
+        start_date: 2026-08-20
+        end_date: 2026-08-20
+      - name: "Internal mentoring: From Algorithm Beginner to AI Agent Expert, Tencent Academy"
+        summary: One-to-one sessions for Tencent staff as a Tencent Academy expert, on growing from algorithm work into building AI agents.
+        start_date: 2026-07-07
+        end_date: present
+      - name: "Internal course: Exploring ChatGPT for Data Analysis"
+        summary: A 1.5-hour course on using ChatGPT in data analysis, certified as a company-level course at Tencent.
+        start_date: 2025-03-04
+        end_date: 2025-03-04
+      - name: "Livestream: ChatGPT Code Interpreter, an AI Tool Changing Data Analysis"
+        summary: >-
+          A 90-minute public talk for Tencent Tech Engineering, streamed on WeChat Channels and Zhihu:
+          how Code Interpreter works, and how to build a Code Interpreter API with LangChain.
+          About 5,600 viewers and 21,000 likes.
+        start_date: 2023-08-24
+        end_date: 2023-08-24

@@ -18,9 +18,7 @@ selected_papers: false
 social: true
 
 announcements:
-  enabled: true
-  scrollable: true
-  limit: 5
+  enabled: false
 
 latest_posts:
   enabled: false
@@ -59,5 +57,23 @@ latest_posts:
 与清华大学合作研究知识增强的语言模型、游戏知识图谱和推荐，发表于 ECAI 2023、SEKE 2023、CCKS 2021 和期刊 _Electronics_。[全部论文]({{ '/zh/publications/' | relative_url }})
 
 2021 年 3 月至 2023 年 7 月，在华南理工大学软件学院担任课程兼职教师，讲授腾讯游戏学院与华南理工大学合作开设的学分课程[《自然语言处理》]({{ '/zh/projects/scut-nlp-course/' | relative_url }})。2026 年 10 月在 Kingston University 做了分享 [_Data-Driven Game Publishing_]({{ '/zh/projects/kingston-talk/' | relative_url }})。之前在[知乎](https://www.zhihu.com/people/sergio-89/posts)写过文章，有一万多关注者。
+
+## <a href="{{ '/zh/news/' | relative_url }}" style="color: inherit">新闻</a>
+
+<div class="news">
+  <div class="table-responsive" style="max-height: 60vw">
+    <table class="table table-sm table-borderless">
+      {%- assign zh_news = site.news | where_exp: "n", "n.zh or n.zh_title" | sort: "date" | reverse -%}
+      {%- for n in zh_news limit: 5 -%}
+        <tr>
+          <th scope="row" style="width: 20%">{{ n.date | date: "%Y.%m.%d" }}</th>
+          <td>
+            {%- if n.zh_title -%}<a class="news-title" href="{{ n.zh_url | relative_url }}">{{ n.zh_title }}</a>{%- else -%}{{ n.zh }}{%- endif -%}
+          </td>
+        </tr>
+      {%- endfor -%}
+    </table>
+  </div>
+</div>
 
 <script src="{{ '/assets/js/zh-nav.js' | relative_url }}"></script>

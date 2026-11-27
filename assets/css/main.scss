@@ -570,6 +570,92 @@ article img,
   }
 }
 
+// CV: same rhythm as the Research page, dates on the left and the entry on the right.
+.cv {
+  margin-top: 0.5rem;
+
+  .cv-lead {
+    margin-bottom: 0.4rem;
+  }
+
+  .cv-contact {
+    font-size: 0.9rem;
+    color: var(--global-text-color-light);
+
+    .sep {
+      margin: 0 0.45rem;
+      opacity: 0.6;
+    }
+  }
+
+  h2.cv-section {
+    font-size: 1.35rem;
+    font-weight: 400;
+    margin: 2.5rem 0 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--global-divider-color);
+  }
+
+  .cv-item {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.4rem;
+    font-size: 0.92rem;
+  }
+
+  .cv-list.compact .cv-item {
+    margin-bottom: 0.9rem;
+  }
+
+  .cv-when {
+    flex: 0 0 150px;
+    color: var(--global-text-color-light);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums;
+
+    span {
+      display: block;
+    }
+  }
+
+  .cv-body {
+    flex: 1 1 auto;
+    min-width: 0;
+
+    p {
+      margin: 0.2rem 0 0;
+    }
+  }
+
+  .cv-title {
+    font-weight: 500;
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+
+  .cv-org,
+  .cv-note {
+    color: var(--global-text-color-light);
+  }
+
+  @media (max-width: 575.98px) {
+    .cv-item {
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .cv-when {
+      flex-basis: auto;
+
+      span {
+        display: inline;
+        margin-left: 0.5rem;
+      }
+    }
+  }
+}
+
 html[data-theme="dark"] {
   --global-bg-color: #14181f;
   --global-text-color: #d9dee5;
