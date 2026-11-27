@@ -1,0 +1,90 @@
+# Registry of illustrated essays published from the Obsidian vault.
+# Hashes live on the posts, not here. Check them with: ruby bin/essay-status
+# Vault path and conversion rules: .agents/skills/publish-essay/SKILL.md
+
+essays:
+  - id: kv-cache
+    live: true
+    cover: assets/img/essays/kv-cache/cover.png
+    tags: ["AI Infra", "LLM 推理", "KV Cache"]
+    summary_zh: "输出为什么比输入贵，缓存命中为什么便宜，从自注意力里的 K 和 V 讲起。"
+    tags_en: ["AI Infra", "LLM inference", "KV Cache"]
+    summary_en: "Why output tokens cost more than input, and why a cache hit is cheap, starting from the K and V in self-attention."
+    date: "2026-11-24"
+    source: AI Infra/illustrate of KV Cache.md
+    figure: AI Infra/KV Cache 图解.html
+    figure_asset: assets/figures/kv-cache.html
+    zh_post: _posts/2026-11-24-kv-cache.zh.md
+    en_post: _posts/2026-11-24-kv-cache.en.md
+    zh_permalink: /zh/kv-cache/
+    en_permalink: /en/kv-cache/
+    title_zh: "图解 KV Cache：为什么输出比输入贵，缓存又为什么能省钱"
+    title_en: "The Illustrated KV Cache: Why Output Tokens Cost More, and Why the Cache Is Cheap"
+    links:
+      - illustrate of KV Cache
+      - 图解 KV Cache
+
+  - id: prefix-caching
+    live: true
+    cover: assets/img/essays/prefix-caching/cover.png
+    tags: ["AI Infra", "LLM 推理", "前缀缓存"]
+    summary_zh: "Agent 每一轮的开头都一样，模型凭什么说“这段我读过了”，又有哪些写法会把缓存弄坏。"
+    tags_en: ["AI Infra", "LLM inference", "Prefix caching"]
+    summary_en: "Every agent turn starts the same way. How the model knows it has read that part already, and which habits break the cache."
+    date: "2026-11-24"
+    source: AI Infra/illustrate of Prefix Caching （前缀缓存）.md
+    figure: AI Infra/Prefix Caching 图解.html
+    figure_asset: assets/figures/prefix-caching.html
+    zh_post: _posts/2026-11-24-prefix-caching.zh.md
+    en_post: _posts/2026-11-24-prefix-caching.en.md
+    zh_permalink: /zh/prefix-caching/
+    en_permalink: /en/prefix-caching/
+    title_zh: "图解 Prefix Caching（前缀缓存）：为什么开头一样，就能少算、少付钱"
+    title_en: "The Illustrated Prefix Caching: Why a Shared Beginning Skips Work and Cost"
+    links:
+      - illustrate of Prefix Caching （前缀缓存）
+      - 图解 Prefix Caching
+      - 图解前缀缓存
+
+  - id: vllm
+    live: true
+    cover: assets/img/essays/vllm/cover.png
+    tags: ["AI Infra", "LLM 推理", "vLLM"]
+    summary_zh: "显存到底被什么占满了，PagedAttention 怎样像操作系统管内存一样管 KV Cache。"
+    tags_en: ["AI Infra", "LLM inference", "vLLM"]
+    summary_en: "What actually fills GPU memory, and how PagedAttention manages the KV cache the way an operating system manages RAM."
+    date: "2026-11-24"
+    source: AI Infra/illustrate of vLLM.md
+    figure: AI Infra/vLLM 图解.html
+    figure_asset: assets/figures/vllm.html
+    zh_post: _posts/2026-11-24-vllm.zh.md
+    en_post: _posts/2026-11-24-vllm.en.md
+    zh_permalink: /zh/vllm/
+    en_permalink: /en/vllm/
+    title_zh: "图解 vLLM：把显存当内存管，一块 GPU 多服务几倍的请求"
+    title_en: "The Illustrated vLLM: Treat GPU Memory Like RAM and Serve More Requests"
+    links:
+      - illustrate of vLLM
+      - 图解 vLLM
+
+  - id: batch-api
+    live: true
+    cover: assets/img/essays/batch-api/cover.png
+    tags: ["AI Infra", "API 计费", "Batch API"]
+    summary_zh: "批处理为什么是半价：你让服务商挑时间算，它把活塞进 GPU 的空闲时段。"
+    tags_en: ["AI Infra", "API pricing", "Batch API"]
+    summary_en: "Why batch is half price: you let the provider pick the time, and it fits your jobs into idle GPU hours."
+    date: "2026-11-26"
+    source: AI Infra/illustrate of Batch API（批处理）.md
+    figure: AI Infra/Batch API 图解.html
+    figure_asset: assets/figures/batch-api.html
+    zh_post: _posts/2026-11-26-batch-api.zh.md
+    en_post: _posts/2026-11-26-batch-api.en.md
+    zh_permalink: /zh/batch-api/
+    en_permalink: /en/batch-api/
+    title_zh: "图解 Batch API：半价是用等待换来的"
+    title_en: "The Illustrated Batch API: The Half Price Comes from Waiting"
+    links:
+      - illustrate of Batch API（批处理）
+      - 图解 Batch API
+      - Batch API

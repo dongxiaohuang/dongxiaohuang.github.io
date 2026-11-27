@@ -1,0 +1,24 @@
+# Fixed renderings for the illustrated-essay series.
+# Keys are the Chinese (or already-English) tokens in the source note.
+# Keep code, URLs, model names, and API field names unchanged.
+
+terms:
+  "KV Cache": "KV Cache"
+  "前缀缓存": "prefix caching"
+  "Prefix Caching": "prefix caching"
+  "Prefill": "Prefill"
+  "预填充": "Prefill"
+  "Decode": "Decode"
+  "解码": "Decode"
+  "显存": "GPU memory"
+  "批处理": "batch processing"
+  "Batch API": "Batch API"
+  "自注意力": "self-attention"
+  "解码器": "decoder"
+  "前馈网络": "feed-forward network"
+  "缓存命中": "cache hit"
+  "未命中": "cache miss"
+  "原理推导": "derived from the mechanism, not from a vendor document"
+  "PagedAttention": "PagedAttention"
+  "vLLM": "vLLM"
+  "FlashAttention": "FlashAttention"

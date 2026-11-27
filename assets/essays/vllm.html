@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>图解 vLLM</title><style>*{box-sizing:border-box}
+body{margin:0;font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:#222;font-size:18px;line-height:1.5;background:#fff}
+.wrap{max-width:940px;margin:0 auto;padding:0 24px 80px}
+header.site{padding:28px 0 18px;border-bottom:1px solid #e6e6e6}
+header .t{font-size:30px;font-weight:300;color:#333}header .s{font-size:16px;color:#666}
+h1{font-size:28px;font-weight:700;margin:64px 0 22px;color:#222}
+h2{font-size:24px;font-weight:700;margin:58px 0 18px;color:#222}
+p{margin:0 0 17px}
+.meta{font-size:14px;color:#666;margin:7px 0}
+.upd{margin:30px 0 30px;padding-left:14px;border-left:4px solid #ddd;font-size:16px;color:#444}
+a{color:#4183c4;text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+code{font-family:"Bitstream Vera Sans Mono",Courier,monospace;color:#c7254e;background:#f9f2f4;padding:2px 4px;border-radius:4px;font-size:.88em}
+ul,ol{margin:0 0 17px;padding-left:26px}li{margin:6px 0}
+table{border-collapse:collapse;margin:22px auto;font-size:15px}th,td{border:1px solid #ddd;padding:7px 12px;text-align:left}th{background:#f7f7f7}
+.fig{margin:30px auto 4px;padding:14px 0 4px;text-align:center;position:relative}
+.fig.shot img{max-width:100%;border:1px solid #e3e3e3;border-radius:6px}
+.cap{font-size:14px;color:#999;text-align:center;margin:8px auto 30px;max-width:780px;line-height:1.45}
+.ctrl{font-size:13px;color:#aaa;margin-top:10px}
+/* shared figure parts */
+.flex{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.mid{align-items:center}
+.col{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lab,.lab2{font-size:13px;color:#888;margin:6px 0}
+.vec{display:inline-flex;border:1px solid #666;vertical-align:middle}
+.vec i{display:block;border-right:1px solid #666}.vec i:last-child{border-right:0}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:38px;padding:0 10px;border:2px solid #6a6a6a;border-radius:8px;margin:3px;font-size:17px;background:#fff;transition:background .3s}
+.tok{font-weight:700;font-size:18px;margin-top:4px}.tok.x{color:#6cc04a}
+.lx{color:#6cc04a}.big{font-size:20px}
+.tag.price{font-size:13px;background:#f4f4f4;border-radius:10px;padding:2px 10px;color:#555}
+.blackbox{background:#3a3a46;color:#fff;border-radius:14px;padding:22px 26px;font-size:17px;line-height:1.3}.blackbox.small{padding:12px 16px;font-size:14px}.blackbox small{color:#bbb}
+.ar{display:block;margin:0 auto}
+.bx{border:2.5px solid #4a4a58;border-radius:12px;padding:9px 20px;font-size:14px;color:#444;font-weight:600;line-height:1.3;min-width:150px}
+.bx small{font-weight:400;color:#888}.bx.sa{background:#fcefdf}.bx.ff{background:#e6eefb}.bx.wide{width:100%}
+.dec{border:2.5px solid #eba7c6;border-radius:16px;padding:16px 16px 8px;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:#fff}
+.dtag{position:absolute;top:-10px;left:14px;background:#fff;padding:0 6px;font-size:11px;letter-spacing:.6px;color:#e393b8}
+.dec.stack{gap:8px}.mini{border:2px solid #eba7c6;border-radius:10px;padding:6px 18px;font-size:13px;color:#777;background:#fdf1f6}
+/* paths */
+.paths{display:flex;flex-direction:column;align-items:center;gap:2px;max-width:560px;margin:0 auto}
+.prow{display:flex;gap:16px;justify-content:center;width:100%}.prow>div{flex:1;display:flex;flex-direction:column;align-items:center}
+.pc{align-items:center}
+/* qkv + attention grids */
+.qgrid,.agrid{display:grid;grid-template-columns:130px repeat(3,150px) 90px;gap:10px 8px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.rl{color:#666;font-size:15px;font-weight:600;text-align:right;padding-right:10px}
+.cc{display:flex;align-items:center;justify-content:center;gap:4px;min-height:34px;font-size:14px}
+.cc.ghost{color:#bbb;font-size:12px}.num{font-weight:700;font-size:16px;color:#555}.sm{font-size:12px;color:#888}
+.wm{display:grid;grid-template-columns:repeat(3,13px);gap:0;border:1px solid #bbb}.wm i{display:block;width:13px;height:13px;border:1px solid}
+.wcell{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.wb{height:6px;background:#dcbef2;border-radius:3px;margin-left:4px}
+.hid{opacity:0;visibility:hidden}
+.agrid>*{transition:opacity .6s}
+.anote{margin-top:16px;font-size:14px;color:#c0602a;font-weight:600;border:2px dashed #f0a04b;border-radius:10px;display:inline-block;padding:6px 14px;transition:opacity .6s}
+.agrid.hl .rl{}
+/* decoding */
+.drows{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+.drow{display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .7s;flex-wrap:nowrap}
+.dlab{width:84px;font-size:14px;font-weight:700;color:#555;text-align:right;line-height:1.25}.dlab small{font-weight:400;color:#999}
+.dtoks{display:flex;gap:2px;min-width:340px;justify-content:flex-start}
+.dtok{display:flex;flex-direction:column;align-items:center;padding:4px 3px;border-radius:8px;border:2px solid transparent}
+.dtok .kv{display:flex;gap:3px;margin-top:2px}
+.dtok.cached{opacity:.55;border:2px dashed #bbb;background:#fafafa}.dtok:not(.cached){border-color:#f5d28a;background:#fffaf0}
+.ctag{font-size:11px;color:#999;margin-top:2px}.dtok:not(.cached) .ctag{color:#d08a1a}
+.mini2{padding:16px 12px 10px;font-size:13px;color:#777;min-width:96px;background:#fdf1f6}.mini2 .dtag{position:absolute}
+.cnt{font-size:13px;color:#888;min-width:140px;text-align:left}.cnt b{font-size:18px;color:#c0602a}
+.pulse .dtok:not(.cached){animation:pl 1s ease}@keyframes pl{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.drow{transition:opacity .7s}.tot{margin-top:18px;font-size:16px;font-weight:600;color:#555;transition:opacity .6s}.tot b{font-size:24px;color:#c0602a}
+/* timeline */
+.tl{max-width:760px;margin:0 auto;text-align:left}
+.lane{display:flex;align-items:center;gap:14px;margin:12px 0;transition:opacity .5s}
+.ln{width:70px;font-weight:700;color:#555;text-align:right;font-size:15px}
+.bar{border:2px solid #4a4a58;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.3;text-align:center;transition:opacity .5s}.bar small{color:#777;font-size:12px}
+.bar.pf{background:#e6eefb;width:300px}.bar.dc{background:#fcefdf;width:150px}
+.seq{display:flex;gap:10px}.axis{text-align:right;color:#aaa;font-size:13px;border-top:2px solid #ccc;margin-top:14px;padding-top:4px}
+/* memory */
+.mem{max-width:720px;margin:0 auto}.memlab{font-size:13px;color:#888;margin-bottom:4px;text-align:left}
+.membar{display:flex;height:48px;border:2.5px solid #4a4a58;border-radius:10px;overflow:hidden;background:#fafafa}
+.seg{display:flex;align-items:center;justify-content:center;font-size:13px;white-space:nowrap;overflow:hidden;transition:width .2s}.seg.w{background:#e6e6ee}.seg.kv{background:linear-gradient(90deg,#fcc990 50%,#a9cbf3 50%);color:#333}.seg.kv.over{background:#f7b9b9}
+.meminfo{margin:10px 0;font-size:15px;color:#555;min-height:22px}
+.sls{display:flex;gap:30px;justify-content:center;flex-wrap:wrap}.sl{font-size:14px;color:#555}.sl input{vertical-align:middle;margin-left:8px;width:170px}
+/* compress */
+.crow{display:flex;align-items:flex-end;gap:14px;margin:18px auto;max-width:900px;text-align:left;transition:opacity .5s}
+.cl{width:150px;font-size:14px;line-height:1.3;flex:none}.cl small{color:#888}
+.blocks{display:flex;gap:2px;align-items:flex-end;flex-wrap:nowrap}
+.kvb{display:flex;flex-direction:column;border:1px solid #666;border-radius:2px;overflow:hidden}.kvb i{flex:1;display:block}
+/* prefix */
+.prow2{display:flex;justify-content:center;flex-wrap:wrap;margin:2px 0}.pinfo{margin:14px 0 4px;font-size:15px;color:#555}.pinfo b{font-size:20px;color:#c0602a}
+/* bars */
+.mb{max-width:720px;margin:16px auto;text-align:left}.brow{display:flex;align-items:center;margin:4px 0;font-size:13px}.bl{width:118px;color:#777;flex:none}
+.brow i{display:block;height:18px;border:1px solid #888;border-radius:3px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}.brow em{font-style:normal;margin-left:8px;color:#555}
+@media(max-width:760px){.qgrid,.agrid{grid-template-columns:90px repeat(3,100px) 60px;font-size:12px}.drow{flex-wrap:wrap}}
+
+/* unified price chart */
+.pgrid{display:grid;grid-template-columns:214px 80px 80px 80px 1fr 1.15fr;gap:7px 10px;align-items:center;max-width:900px;margin:0 auto;text-align:left;font-size:14px}
+.ph{font-size:12px;color:#777;font-weight:600;line-height:1.25}.ph.wide{padding-left:2px}
+.dot{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a;margin-right:5px;vertical-align:-1px}
+.pn{color:#333;font-weight:600}.pn small{display:block;color:#999;font-size:11px;font-weight:400;line-height:1.1}
+.pcell{border:1px solid #6a6a6a;border-radius:6px;padding:3px 0;text-align:center;font-size:13px;color:#333}
+.pbar{display:flex;align-items:center;gap:8px}.pbar i{display:block;height:16px;border:1px solid #6a6a6a;border-radius:3px;width:0}.pbar b{font-size:13px;color:#555}
+.sep{margin-top:6px}
+.pn{display:flex;align-items:center;gap:9px}.vi{width:26px;height:26px;border-radius:6px;flex:none}
+.static .ctrl{display:none}
+.pgrid{padding:0 6px}
+
+.vcell{position:relative;display:inline-flex;vertical-align:middle}
+.vl{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:7px;font-size:14px;white-space:nowrap}
+.erow{display:flex;justify-content:center;gap:90px}.ecol{display:flex;flex-direction:column;align-items:center;gap:8px;width:120px}
+.static .fig{padding:28px 44px 28px}
+
+.nowrap{flex-wrap:nowrap}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+#fig-bill .blackbox{padding:18px 18px;font-size:16px;min-width:150px}
+#fig-decode0 .chip,#fig-decode1 .chip{min-width:0;padding:0 7px;height:32px;font-size:15px;margin:2px}
+.dtoks{min-width:350px}.dlab{width:104px}.cnt{min-width:110px}
+.bar.dc{width:205px}
+.cl{width:215px}
+
+/* prefill figure */
+.pfig{display:grid;grid-template-columns:370px 104px 300px;gap:0 8px;align-items:center;max-width:820px;margin:0 auto;text-align:center}
+.pfl{display:flex;flex-direction:column;align-items:center;gap:6px}
+.pfbadge{align-self:flex-start;font-size:12px;letter-spacing:1px;font-weight:700;color:#fff;background:#6cc04a;border-radius:10px;padding:2px 12px;transition:background .3s}.pfbadge.d{background:#e8789f}
+.pfout{display:flex;gap:6px;min-height:44px;align-items:center}
+.pfdec{padding:20px 18px 12px;font-size:13px;color:#555;width:100%;transition:all .4s}.pfdec small{color:#999}.pfdec.hot{background:#fff6fa;box-shadow:0 0 0 4px #f7c9dc}
+.pfin{display:flex;gap:6px;justify-content:center;min-height:66px}
+.pfcol{display:flex;flex-direction:column;align-items:center;gap:2px;transition:opacity .4s}.pfcol.hot .chip{box-shadow:0 0 0 3px #f5d28a}
+.hide{opacity:0;visibility:hidden}
+.pfin .pfcol.hide{display:none}.pfout .chip{transition:opacity .4s}
+.pfmid{font-size:13px;color:#c0602a;font-weight:600;min-height:20px}
+.pfr{display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:left}
+.pfcache{border:2.5px solid #4a4a58;border-radius:12px;padding:10px;background:#fff}.pfcache .t{font-size:11px;color:#888;letter-spacing:.8px;margin-bottom:6px}
+.slots{display:flex;gap:5px}.slot{border:1.5px dashed #ccc;border-radius:8px;padding:4px;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:#bbb;transition:all .4s}
+.slot .kvv{opacity:0;display:flex;gap:3px;transition:opacity .4s}.slot.full{border:1.5px solid #6a6a6a;color:#555;background:#fafafa}.slot.full .kvv{opacity:1}
+.slot.hot{box-shadow:0 0 0 3px #f5d28a}.slot.read{box-shadow:0 0 0 3px #a9cbf3}
+.pfmask{border:1.5px solid #ddd;border-radius:10px;padding:8px 10px;font-size:11px;color:#888;line-height:1.35;transition:opacity .4s;height:208px;overflow:hidden}
+.pfmask table{border-collapse:separate;border-spacing:3px;margin-top:5px}.pfmask td{width:34px;height:22px;text-align:center;font-size:11px;border-radius:4px}
+.pfmask td.l{width:auto;color:#555;background:none;text-align:right;padding-right:4px;font-size:11px}.pfmask td.y{background:#a9cbf3;color:#335}.pfmask td.n{background:#eee;color:#bbb}
+.pfcap{grid-column:1/4;margin-top:16px;font-size:14px;color:#555;height:44px}
+
+.kvg{display:inline-flex;flex-direction:column;align-items:center}.kvg small{font-size:10px;font-weight:700;line-height:1.1;margin-top:1px}
+.lg{display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:11px;color:#666;letter-spacing:0;text-transform:none}
+.lg i{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a}
+.legend{margin:10px 0 0;font-size:12px;color:#666;text-align:center}
+.pfcache .t{display:flex;align-items:center}
+.slot .kvv{gap:4px}
+
+.ctrl a.pb{display:inline-block;min-width:84px;text-align:center}
+.pfig{min-height:330px}
+
+/* z -> next word figure */
+.lrow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:nowrap}
+.lcol{display:flex;flex-direction:column;align-items:center;gap:6px}.lcap{font-size:11px;color:#888;line-height:1.25;max-width:150px}
+.lyr{padding:18px 14px 10px;gap:2px}.lyr .bx{min-width:150px;font-size:12px;padding:7px 12px}
+.lmh{min-width:120px;font-size:12px;padding:8px 12px}
+.lturn{color:#bbb;font-size:20px;margin:6px 0}
+.ltbl{display:grid;grid-template-columns:48px 36px 64px 150px;gap:3px 6px;align-items:center;text-align:left;font-size:12px}
+.lh{font-size:10px;color:#999;font-weight:600}.lw{text-align:right;color:#333}.ll{color:#888;text-align:right}.la{color:#c0602a;font-size:11px;font-weight:600}
+.lb{display:flex;align-items:center;gap:6px}.lb i{display:block;height:12px;border:1px solid #888;border-radius:2px}.lb em{font-style:normal;color:#555;font-size:11px}
+
+/* animated q/k/v figure */
+.qgrid2{display:grid;grid-template-columns:96px repeat(3,128px) 92px 170px;gap:10px 14px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.qgrid2>*{transition:opacity .5s}
+.qnote{font-size:12px;font-weight:600;text-align:left;color:#555}
+.qnote[data-role=q]{color:#b0505a}.qnote[data-role=k],.qnote[data-role=v]{color:#2f8f4e}
+.qgrid2.final .cc[data-role=q],.qgrid2.final .rl[data-role=q]{opacity:.35}
+.qgrid2.final .cc[data-role=k],.qgrid2.final .cc[data-role=v]{outline:2px dashed #7fbf8f;outline-offset:2px;border-radius:4px}
+.qcap{margin-top:16px;font-size:14px;color:#555;height:44px}
+
+math{font-size:1.08em}math[display=block]{margin:12px 0}
+
+table td:nth-child(2),table th:nth-child(2){white-space:nowrap}
+
+.callout{margin:0 0 17px}
+.callout .ct{font-weight:700;color:#222;margin-bottom:6px}.callout p{margin:0 0 17px}.callout ul{margin:0 0 17px}
+
+/* decode figures: one shared column grid so every column lines up across rows */
+#fig-decode0 .drow,#fig-decode1 .drow{display:grid;grid-template-columns:96px 390px 30px 96px 30px 72px 88px;column-gap:3px;justify-content:center;align-items:center}
+#fig-decode0 .dtoks,#fig-decode1 .dtoks{display:grid;grid-template-columns:repeat(5,78px);gap:0;min-width:0;justify-content:start}
+#fig-decode0 .dtok,#fig-decode1 .dtok{width:78px;box-sizing:border-box;padding:4px 2px}
+#fig-decode0 .dlab,#fig-decode1 .dlab{width:auto;padding-right:8px;text-align:right}
+#fig-decode0 .mini2,#fig-decode1 .mini2{min-width:0;width:96px;box-sizing:border-box;padding:16px 4px 10px}
+#fig-decode0 .cnt,#fig-decode1 .cnt{min-width:0;width:88px}
+#fig-decode0 .span,#fig-decode1 .span{display:block}
+.dout{display:flex;justify-content:center}
+.static .fig{padding:28px 32px 28px}
+
+/* small DECODER tag so it no longer hides the top border of the box */
+.mini2 .dtag{font-size:10px;letter-spacing:.4px;left:12px;top:-8px;padding:0 4px;line-height:14px}
+.mini2{padding-top:18px}
+
+/* per-token price figure */
+.bill{display:flex;align-items:flex-start;justify-content:center;gap:12px}
+.bgrp{display:flex;flex-direction:column;align-items:center}
+.blab{font-size:12px;color:#888;margin-bottom:8px;height:16px}
+.brow2{display:flex;align-items:flex-start;gap:6px}
+.btc{display:flex;flex-direction:column;align-items:center;gap:6px}
+.bbar{width:40px;align-self:center;border:1px solid #6a6a6a;border-radius:4px;display:flex;align-items:flex-start;justify-content:center;font-size:11px;font-weight:700;color:#444;padding-top:1px;box-sizing:border-box}
+.bcap{margin-top:12px;font-size:12px;color:#555;background:#f4f4f4;border-radius:10px;padding:2px 10px}
+.bmid{display:flex;align-items:center;gap:6px;margin-top:20px;align-self:flex-start}
+.bmid .blackbox{padding:14px 16px;font-size:14px;min-width:150px;margin-top:0}
+.bmid .ar{margin-top:0}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+
+/* ---- prefix-caching figures (px*) ---- */
+.pxtog{margin:2px 0 10px;font-size:14px}.pxtog a{display:inline-block;padding:3px 12px;margin:0 3px;border:1px solid #bbb;border-radius:14px;color:#555;cursor:pointer}.pxtog a.on{background:#444;color:#fff;border-color:#444}
+.pxgrid{display:inline-block;text-align:left}
+.pxrow{display:flex;align-items:center;margin:6px 0;transition:opacity .4s}
+.pxrl{width:34px;font-weight:bold;color:#666}
+.pxcs{display:flex;width:604px;flex:none}
+.pxblock{display:flex;flex-direction:column;align-items:center;justify-content:center;width:84px;height:46px;margin:0 3px 0 0;border:2px solid #777;border-radius:6px;font-size:14px;line-height:1.15;transition:background .3s}
+.pxblock small{font-size:11px;color:#555}
+.pxcnt{width:190px;white-space:nowrap;font-size:13px;color:#666;padding-left:10px}.pxcnt b{color:#c0602a;font-size:15px}
+.pxinfo{white-space:nowrap;margin:12px 0 4px;font-size:15px;color:#555;height:30px;line-height:30px}.pxinfo b{font-size:19px;color:#c0602a}
+.lg{display:inline-flex;align-items:center;margin-left:10px;font-size:12px;color:#777}.lg i{display:inline-block;width:12px;height:12px;border:1px solid #777;margin-right:4px}
+.pxcap{margin:12px auto 0;min-height:44px;max-width:700px;font-size:15px;color:#555;line-height:1.45}
+.pxcausal{display:flex;justify-content:center;gap:6px;margin:8px 0}
+.pxcc{display:flex;flex-direction:column;align-items:center;width:92px}
+.pxtok{display:flex;align-items:center;justify-content:center;width:88px;height:40px;border:2px solid #6a6a6a;border-radius:8px;background:#b5e0a1;font-size:16px;cursor:pointer}.pxtok.chg{background:#fff3c4;border-color:#d99a00}
+.pxkv{display:flex;gap:4px;justify-content:center;margin-top:8px;padding:6px 8px;border:1px solid #888;border-radius:6px;transition:background .3s}
+.pxst{margin-top:5px;font-size:12px;height:16px}
+.pxreq{margin:8px 0}.pxbs{display:flex;justify-content:center;gap:10px}
+.pxb{border:2px solid #777;border-radius:8px;padding:6px 8px 4px;min-width:150px;text-align:center;transition:background .3s}.pxb.tail{min-width:110px;border-style:dashed;background:#fafafa}
+.pxt{display:inline-block;margin:2px;padding:3px 7px;border:1px solid #777;border-radius:5px;background:#fff;font-size:14px}.pxt.chg{background:#fff3c4;border-color:#d99a00;cursor:pointer}.pxb .pxt{cursor:pointer}
+.pxh{font-size:12px;color:#555;margin-top:4px;font-family:Menlo,monospace}.pxh b{color:#222}
+.pxs{font-size:12px;font-weight:bold;height:16px;color:#555}
+.pxtr{display:flex;align-items:center;justify-content:center;margin:8px 0}
+.pxroot{width:46px;height:46px;border-radius:50%;border:2px solid #666;display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff}
+.pxhl{width:22px;height:2px;background:#666}.pxhl.short{width:16px}
+.pxtrunk{width:190px;padding:12px 8px;border:2px solid #6a6a6a;border-radius:8px;background:#b5e0a1;font-size:15px;line-height:1.3}.pxtrunk small{display:block;font-size:11px;color:#444;margin-top:4px}
+.pxbr{border-left:2px solid #666;padding:0}
+.pxleaf{position:relative;width:250px;height:44px;margin:4px 0 4px 16px;padding:2px 8px;border:2px solid #777;border-radius:8px;background:#fcc990;text-align:left;font-size:13px;line-height:1.2;cursor:pointer;display:flex;flex-direction:column;justify-content:center}
+.pxleaf::before{content:"";position:absolute;left:-18px;top:50%;width:16px;height:2px;background:#666}
+.pxleaf small{font-size:11px;color:#555}.pxleaf em{color:#c0392b;font-style:normal;font-weight:bold}
+.pxfl{display:flex;align-items:stretch;justify-content:center;margin:8px 0}
+.pxfb{width:104px;padding:8px 5px;border:2px solid #aaa;border-radius:8px;font-size:13px;line-height:1.25;display:flex;flex-direction:column;justify-content:center;color:#777;transition:all .3s}
+.pxfb small{font-size:11px;color:#aaa}.pxfb.done{background:#eef7e8;color:#555}.pxfb.on{background:#f5d28a;border-color:#6a6a6a;color:#222}
+.pxfa{display:flex;align-items:center;padding:0 3px}
+.pxdet{margin:12px auto 6px;max-width:700px;min-height:46px;font-size:15px;line-height:1.45;color:#333}
+.pxbar{display:flex;width:700px;margin:6px auto 0;height:26px;border:1px solid #777}.pxbar i{font-style:normal;font-size:12px;line-height:26px;text-align:center;overflow:hidden;white-space:nowrap}
+.pxbl{display:flex;justify-content:space-between;width:700px;margin:2px auto 0;font-size:12px;color:#777}
+.pxsl{width:420px;margin:6px 0 14px}.pxsll{font-size:15px;color:#555}.pxsll b{color:#c0602a}
+.pxcb{display:flex;align-items:center;width:700px;margin:8px auto}
+.pxcbn{width:150px;text-align:right;font-size:14px;color:#555;padding-right:10px}
+.pxcbt{flex:1;height:26px;background:#f1f1f1;border:1px solid #bbb}.pxcbt i{display:block;height:100%;transition:width .15s}
+.pxcbv{width:110px;text-align:left;padding-left:10px;font-size:15px}.pxcbv small{display:block;font-size:11px;color:#999}
+.pxnote{margin-top:4px;font-size:12px;color:#999}
+#fig-pxwaste{min-height:300px}
+
+pre{background:#f7f7f7;border:1px solid #e3e3e3;border-radius:6px;padding:12px 14px;font-size:13px;line-height:1.45;overflow-x:auto}pre code{background:none;color:#333;padding:0}
+
+/* vLLM figures (prefix vl) */
+.vlrow{display:flex;justify-content:center;gap:28px;flex-wrap:nowrap}
+.vlpan{text-align:center}.vlpan h5{margin:0 0 6px;font-size:14px;color:#666;font-weight:600}
+.vlg{display:grid;gap:3px;justify-content:center;margin:0 auto}
+.vlc{width:22px;height:22px;border:1px solid #d5d5d5;border-radius:3px;background:#f4f4f4;font-size:11px;color:#333;display:flex;align-items:center;justify-content:center;transition:background .25s}
+.vlc.vlhl{outline:2.5px solid #c0602a;outline-offset:1px;position:relative;z-index:1}
+.vlnote{height:22px;line-height:22px;font-size:14px;color:#555;margin-top:6px;white-space:nowrap}.vlnote b{color:#c0602a}
+.vlcap{min-height:44px;font-size:14.5px;color:#444;margin:10px auto 0;max-width:720px;line-height:1.4}
+.vlbar{display:flex;height:40px;border:2px solid #4a4a58;border-radius:8px;overflow:hidden;width:780px;margin:4px auto}
+.vlbar>div{display:flex;align-items:center;justify-content:center;font-size:13px;color:#333;white-space:nowrap;overflow:hidden}
+.vlbl{width:780px;margin:12px auto 0;text-align:left;font-size:13px;color:#777}
+.vlpb{display:inline-block;border:2px solid #4a4a58;border-radius:6px;padding:3px 4px 2px;margin:3px;background:#fff;vertical-align:top}
+.vlpb small{display:block;font-size:11px;color:#888;height:14px;line-height:14px}
+
+.vltb{border-collapse:collapse;font-size:13px;margin:0 auto}.vltb td,.vltb th{border:1px solid #ccc;padding:2px 8px;font-weight:400;min-width:54px;height:22px}.vltb th{background:#f4f4f4;color:#666}
+.vlq{display:flex;gap:6px;justify-content:center;flex-wrap:nowrap;height:40px;align-items:center}
+.vlq .chip{margin:0;min-width:70px;height:32px;font-size:14px}
+.vlbx{border:2.5px solid #4a4a58;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;color:#444;line-height:1.35}.vlbx small{display:block;font-weight:400;color:#777;font-size:12px}
+.vlbx.in{background:#fff;border-style:dashed}.vlbx.sc{background:#fcefdf}.vlbx.kv{background:#e6eefb}.vlbx.gp{background:#e9f6e2}
+.vlsl{display:flex;align-items:center;justify-content:center;gap:10px;font-size:14px;color:#555;margin:10px 0}.vlsl input{width:300px}
+#fig-vlarch .vlbx{padding:8px 9px;font-size:13px}#fig-vlarch .vlbx small{font-size:11.5px}
+/* opening phenomenon: slots × steps. Classes stay under #fig-vlarrive. */
+#fig-vlarrive .vla-h{height:30px;line-height:30px;font-size:18px;font-weight:700;color:#444;text-align:center}
+#fig-vlarrive .vla-h span{font-weight:400;color:#999;margin-left:6px;font-size:15px}
+#fig-vlarrive .vla-chips{display:flex;justify-content:center;flex-wrap:nowrap;gap:8px;height:74px;margin:2px auto 8px}
+#fig-vlarrive .vla-chip{width:118px;height:70px;box-sizing:border-box;border:2px solid #e0e0e0;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
+#fig-vlarrive .vla-chip b{font-size:15px;font-weight:700;color:#333}
+#fig-vlarrive .vla-chip small{font-size:12px;color:#999;font-weight:400;height:15px;line-height:15px;white-space:nowrap}
+#fig-vlarrive .vla-board{display:grid;grid-template-columns:150px repeat(8,48px);column-gap:4px;row-gap:4px;justify-content:center;margin:0 auto}
+#fig-vlarrive .vla-lab{height:48px;line-height:48px;text-align:right;padding-right:10px;font-size:17px;font-weight:700;color:#444;white-space:nowrap}
+#fig-vlarrive .vla-lab.vla-axis{height:22px;line-height:22px;color:#555}
+#fig-vlarrive .vla-lab span{font-weight:400;color:#999;font-size:14px;margin-left:4px}
+#fig-vlarrive .vla-num{height:22px;line-height:22px;text-align:center;font-size:14px;color:#ccc;font-variant-numeric:tabular-nums}
+#fig-vlarrive .vla-cell{width:48px;height:48px;box-sizing:border-box;border:1px solid #d5d5d5;border-radius:4px;background:#e8e8e8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#333}
+#fig-vlarrive .vla-cell.q{background:#fff;border-style:dashed;border-color:#ddd}
+#fig-vlarrive .vla-cell.on{outline:2.5px solid #c0602a;outline-offset:1px;position:relative;z-index:1}
+#fig-vlarrive .vla-tag{height:28px;line-height:28px;margin-top:6px;font-size:16px;font-weight:600;color:#c0602a;text-align:center;white-space:nowrap}
+#fig-vlarrive .vlcap{min-height:44px;max-width:760px}
+
+.vlbar,.vlbl{width:min(780px,96%)!important}
+
+#fig-vlshare .vltb th,#fig-vlshare .vltb td{min-width:92px;padding:6px 10px;font-size:15px}
+
+/* vlpage: logical -> block table -> physical */
+#fig-vlpage .vlpg-stage{position:relative;margin:6px auto 4px}
+#fig-vlpage .vlpg-lab{position:absolute;left:0;font-size:13px;color:#777;white-space:nowrap}
+#fig-vlpage .vlpg-lab b{color:#444}
+#fig-vlpage .vlpg-blk{position:absolute;box-sizing:border-box;border:2px solid #4a4a58;border-radius:6px;background:#fff;padding:3px 6px 4px;text-align:center}
+#fig-vlpage .vlpg-blk.free{border:2px dashed #c8c8c8;background:#fafafa}
+#fig-vlpage .vlpg-blk small{display:block;font-size:11px;color:#777;height:14px;line-height:14px;white-space:nowrap}
+#fig-vlpage .vlpg-blk.free small{color:#bbb}
+#fig-vlpage .vlpg-cells{display:grid;grid-template-columns:repeat(4,15px);gap:3px;justify-content:center;margin-top:5px}
+#fig-vlpage .vlpg-c{width:15px;height:15px;box-sizing:border-box;border:1px solid #d5d5d5;border-radius:3px;background:#f4f4f4}
+#fig-vlpage .vlpg-c.on{border-color:#aaa}
+#fig-vlpage .vlpg-c.hot{outline:2.5px solid #c0602a;outline-offset:1px;animation:vlpgpop .7s ease}
+@keyframes vlpgpop{0%{transform:scale(.4)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+#fig-vlpage .vlcap{min-height:66px}
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+<style>
+body{font-family:Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;font-weight:300;line-height:1.6;color:#1f2328;background:#fbfaf7}
+.wrap{max-width:930px;padding:0 15px 80px}
+h1{font-size:32px;font-weight:300;line-height:1.2;margin:48px 0 20px;color:#1f2328}
+h2{font-size:21.6px;font-weight:400;line-height:1.3;margin:44px 0 12px;color:#1f2328}
+h3{font-size:17.6px;font-weight:500;line-height:1.4;margin:28px 0 8px;color:#1f2328}
+p,ul,ol{margin-bottom:16px}
+b,strong{font-weight:500}
+a{color:#1d4e89}
+table{font-size:14.4px}
+.cap{font-size:13.6px;color:#5f6670}
+.dtag{background:#fbfaf7}
+</style>
+</head>
+<body><div class="wrap">
+<h1>图解 vLLM</h1>
+<p>把同一个模型、同一块 GPU，换一个推理引擎，吞吐量能差出 <b>2–4 倍</b>（vLLM 论文在同等延迟下的测量）。而且这些 GPU 的算力常常没有跑满，<b>显存</b>（GPU memory，也叫 VRAM）<b>却已经“满”了</b>。这篇文章要回答：显存到底被什么占满了？vLLM 凭什么能用同样的显存多装几倍的请求？</p>
+<p>线索只有一个：<b>把 KV Cache 当成操作系统的内存来管理</b>。我们沿用《图解 Transformer》的做法：先从外部看一台推理服务器怎么接请求，再一步步打开它的显存、调度器和 GPU。</p>
+<p>这是《<i>图解 KV Cache</i>》和《<i>图解 Prefix Caching</i>》的续篇：前者讲 K、V 为什么可以存下来，后者讲跨请求怎么复用。这一篇讲<b>这些 K、V 在 GPU 显存里到底怎么摆</b>，以及一个引擎怎么每一步决定谁先算。</p>
+<h2>请求长短不一：短的早早结束，长的一直占着名额</h2>
+<p>让我们先从外部看。一台推理服务器是一个“请求进、token 出”的接口。请求在不同时间到达，有的 3 步就结束，有的要占 8 步。下图：batch size = 4（同一步最多同时跑 4 个请求），6 个请求（演示值）。三个词标在图上——左边每一行是 batch 里的一个位置，每一列是<b>一个解码步</b>（这一列里每个在 batch 里的请求吐出 1 个 token），色条上的数字是<b>生成步数</b>。</p>
+<p><b>这三个词为什么会出现？</b> 因为 GPU 服务器有两个事实，逼着你必须这样想：</p>
+<p>- <b>请求（request）</b>：一个用户的一次提问。服务器不是只服务你一个人，同一时刻有很多人在问，每个人的提问就是一个请求。
+- <b>解码步（decode step，也叫 iteration）</b>：大模型<b>一次只能吐 1 个 token</b>，下一个 token 要等上一个出来才能算（自回归）。所以一个 100 字的回答，要把整个模型从头到尾算 100 遍，每算一遍就是一步。步是模型的最小节拍。
+- <b>批大小（batch size）</b>：每一步，GPU 都要把几十 GB 的模型权重读一遍，这个成本是固定的。多带几个请求一起算，几乎不多花时间，所以<b>一起算</b>最划算。但一起算的请求数有上限（显存放不下更多人的 KV Cache），这个上限就是 batch size。<b>batch size = GPU 同一步里同时服务的请求数</b>（vLLM 里对应参数 <code>max_num_seqs</code>；真实系统里它还受 KV Cache 显存限制，不是固定值）。</p>
+<p>图里取 4 只是为了画得下；真实服务器可以是几十上百个。一句话：<b>很多请求排队，每步只能让 batch size 那么多的请求各前进一格。</b></p>
+<p>图里的 A–F 就是 6 个<b>不同用户的请求</b>，字母本身没有别的含义：A 只是打个招呼，回答很短（3 步）；B 要写一篇长文，回答很长（8 步）；C 查天气（4 步）、D 写摘要（6 步）、E 翻译一句话（4 步）、F 回一声“好的”（3 步）。<b>同一时刻 batch 里只有 4 个位置</b>，所以后来的人要等。这张图只展示问题：有人早早走了，有人一直占着。位置空出来之后怎么补，旧办法和新办法各是什么，是下一张图的事。</p>
+<p>4 个收银台、6 个顾客。买 3 件的先走，空出收银台；买 8 件的一直占着。满了，后来的人在「排队」那一行等。</p>
+<div class="fig" data-fig="vlarrive" id="fig-vlarrive"></div><p class="cap">点 Next step，从左往右看。每个字母是一个用户请求：A 打招呼（3 步）、B 写长文（8 步）、C 查天气（4 步）、D 写摘要（6 步）、E 翻译句子（4 步）、F 回一声好（3 步）。A、B 先到，C、D 把 batch 的 4 行坐满；E 来了没位置，就在排队那一行等；A 只走 3 步，下一列 E 坐下，B 的色条一直铺到第 8 列。F 要等 C 走了才能进 batch。</p>
+<p>问题就出在这里：第 3 步 A 走了，第 4 步那一行是<b>空着等</b>，还是<b>马上让排队的 E 补进来</b>？这两种做法，下一张图把它们并排放在一起比。</p>
+<div class="fig" data-fig="vlbatch" id="fig-vlbatch"></div><p class="cap">点 Next step 看关键时刻。上排<b>静态批处理</b>：A 走了那一行空着（粉灰 = 浪费），要等最慢的 B 整批结束，E、F 才能进来。下排<b>连续批处理</b>（continuous batching）：A 一走立刻让 E 顶上。橙框标出本步发生的事。</p>
+<p>注意：同样 6 个请求，静态批处理要 12 步、batch 利用率约 58%；连续批处理 8 步、约 88%。灰色越多，GPU 越闲——<b>这是“调度”层面的浪费</b>，还没扯到显存。vLLM 的做法是每一步都重新决定本步算谁（后面“调度器”一节）。</p>
+<p>但连续批处理有一个前提：新请求补进来时，<b>显存里要有地方放它的 KV Cache</b>。接下来看显存。</p>
+<h2>能同时服务多少请求，取决于 KV Cache 那约 30% 的显存</h2>
+<p>以论文的例子为准：一个 13B 参数的模型在一块 40GB 的 A100 上，约 65%（26GB）的显存放模型权重，<b>接近 30% 放 KV Cache</b>，剩下是中间结果。权重是固定的，能给更多请求用的只有这 30%。所以<b>能同时服务多少个请求，几乎就等于 KV Cache 区域能装下多少个请求</b>。</p>
+<div class="fig" data-fig="vlmem" id="fig-vlmem"></div><p class="cap">上排：显存的构成。下排：在 KV Cache 这块区域里，真正存着 token 的 K、V 的比例。论文里对比的旧系统平均只有 20.4%–38.2%，vLLM 达到 96.3%。</p>
+<div class="callout"><div class="ct">一个 token 的 KV 有多大？（按论文的 OPT-13B 算）</div><p>判据：每个 token 要为每一层各存一份 K 和一份 V。</p><ul><li>OPT-13B 有 40 层，隐藏维度 5120，FP16 每个数 2 字节：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mo>&#x000D7;</mo><mn>5120</mn><mo>&#x000D7;</mo><mn>40</mn><mo>&#x000D7;</mo><mn>2</mn><mo>&#x0003D;</mo><mn>819</mn><mrow><mo>&#x0002C;</mo></mrow><mn>200</mn></mrow></math> 字节，约 <b>0.8 MB / token</b>（论文写 800 KB）。</li><li>一个最长 2048 token 的请求，KV 最多 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2048</mn><mo>&#x000D7;</mo><mn>0.8</mn><mtext>&#x000A0;MB</mtext><mo>&#x02248;</mo><mn>1.6</mn><mtext>&#x000A0;GB</mtext></mrow></math>（论文同样给出 1.6GB）。</li><li>12GB 的 KV 区域，如果每个请求都按 2048 token 预留，只能放 7 个请求。这就是下一节的问题。</li></ul></div>
+<p>论文里的 40GB 是 2023 年的 A100，今天的卡显存大得多。下表是几款常见 GPU 的单卡显存（2026-11-24 查询，数字以厂商官方页面为准，非官方来源已标出）：</p>
+<table><thead><tr><th>GPU</th><th>单卡显存</th><th>说明</th></tr></thead><tbody><tr><td>NVIDIA A100</td><td>40GB（论文使用的型号）</td><td>来自 vLLM 论文，本文未再核对其他规格</td></tr><tr><td>NVIDIA H100 SXM</td><td>80GB HBM3</td><td>二手来源，未逐页核实</td></tr><tr><td>NVIDIA <a href="https://www.nvidia.com/h200">H200</a></td><td>141GB HBM3e</td><td>NVIDIA 官方页面</td></tr><tr><td>NVIDIA B200（Blackwell）</td><td>约 180–192GB HBM3e</td><td>不同来源写法不一致（标称与可用量不同），以你所用实例的文档为准</td></tr><tr><td>NVIDIA B300（Blackwell Ultra）</td><td>288GB HBM3e</td><td><a href="https://www.tomshardware.com/pc-components/gpus/nvidia-announces-blackwell-ultra-b300-1-5x-faster-than-b200-with-288gb-hbm3e-and-15-pflops-dense-fp4">Tom’s Hardware 报道</a></td></tr><tr><td>NVIDIA Rubin（HGX Rubin NVL8）</td><td>288GB HBM4，22TB/s</td><td><a href="https://www.nvidia.com/en-us/data-center/hgx/">NVIDIA HGX 页面</a></td></tr><tr><td>AMD Instinct MI300X / MI325X / MI355X</td><td>192GB / 256GB / 288GB</td><td><a href="https://www.amd.com/en/products/accelerators/instinct/mi350.html">AMD MI350 页面</a></td></tr><tr><td>NVIDIA RTX 4090 / <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">RTX 5090</a>（消费级）</td><td>24GB / 32GB GDDR</td><td>5090 来自 NVIDIA 官方页面；4090 来自二手来源</td></tr></tbody></table>
+<p>数据中心卡大致从 80GB 走到了 190–290GB。显存越大，扣掉模型权重后留给 KV Cache 的区域就越大，同时能服务的请求也越多。但模型也在变大，所以<b>“KV Cache 占多少”这个问题并没有消失</b>，只是数字搬到了更大的量级。</p>
+<p>接口上的 <a href="https://platform.openai.com/docs/api-reference/completions/create"><code>max_tokens</code></a>（也叫 <a href="https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create"><code>max_completion_tokens</code></a>）只限制这一次<b>最多再生成多少个 token</b>，不算 prompt。上面的 2048 是整段上限：prompt 加上还要生成的。prompt 已经占掉的加上 <code>max_tokens</code>，不能超过模型的 context；静态预留仍按这个整段上限占 KV。vLLM 的 <a href="https://docs.vllm.ai/en/stable/api/vllm/sampling_params/"><code>SamplingParams.max_tokens</code></a> 也只是「最多再生成多少个」。</p>
+<h2>按最大长度预留，让 KV 显存里只有 20%–38% 真正存了 token</h2>
+<p>上一节讲的是：batch 里的位置空出来，要<b>马上补人</b>。但这个 batch <b>一共能有几个位置</b>（batch size），由显存最多能装下几个请求的 KV Cache 决定。旧做法恰恰在这里浪费了大半，把 batch size 压得很低。两层各管一件事，要一起解决才有效：</p>
+<table><thead><tr><th></th><th>管什么</th><th>旧做法的问题</th><th>新做法</th></tr></thead><tbody><tr><td>调度</td><td>batch 里的位置空了怎么办</td><td>空着等最慢的请求</td><td>每一步都补人（连续批处理）</td></tr><tr><td>显存</td><td>batch 最多能有几个位置</td><td>按最大长度预留，浪费显存，batch size 被压低</td><td>分页按需分配，batch size 能做大</td></tr></tbody></table>
+<p>只有连续批处理、没有分页：batch 想补人，却可能因为显存被预留占满而补不进去。只有分页、没有连续批处理：位置空了还是得等整批结束才补。</p>
+<p>请求进来时，系统<b>不知道</b>它最终会生成多长。最稳妥的做法是：先按最大长度（比如 2048）在显存里<b>划一整块连续的空间</b>。这样做有三种浪费（论文的分类）：</p>
+<table><thead><tr><th>浪费</th><th>是什么</th><th>为什么发生</th></tr></thead><tbody><tr><td>预留（reservation）</td><td>给未来 token 留着、但眼下还没用到的槽位</td><td>这个请求还在生成，别的请求用不上这块地</td></tr><tr><td>内部碎片（internal fragmentation）</td><td>预留了 2048，实际只生成 200，剩下 1848 永远用不上</td><td>事先不知道输出多长</td></tr><tr><td>外部碎片（external fragmentation）</td><td>空闲空间一共够，但被切成零碎小块，凑不出一整块连续的</td><td>每个请求都要一块<b>连续</b>区域</td></tr></tbody></table>
+<p>这三种加起来，旧系统里只有 20.4%–38.2% 的 KV 显存真正存着 token（上一张图）。<b>根源在于“连续”这个要求</b>：因为每个请求都要一整块连续地址，所以必须预留，所以必须浪费。</p>
+<h2>PagedAttention 把 KV Cache 切成小块按需分配，浪费降到只剩最后一块的零头</h2>
+<p>先想一个问题：一个请求的 KV Cache 是<b>一个 token 一个 token 长出来的</b>，没人知道它最后会有多长。旧做法是一次要一整块大的，上一节已经看到有多浪费。能不能<b>用多少给多少</b>？</p>
+<p>打个比方：你要记笔记，但不知道会记多少页。</p>
+<ul><li><b>旧做法</b>：先买一本 2048 页的大本子，万一写满呢？结果只写了 6 页，剩下的白白占着，别人也不能用。而且这本子必须整本放在书架上，书架没有这么大的空位就放不进去。</li><li><b>新做法</b>：用小便签，每张只有 4 行。写满一张，再拿一张。便签可以随手塞进抽屉里<b>任何</b>一个空位，不用挨着放。你只要有一张<b>目录</b>：“第 1 张在 7 号抽屉，第 2 张在 1 号抽屉……”。</li></ul>
+<p>把这个比方对应到 KV Cache，就是下面四个词（也是图里出现的词）：</p>
+<ul><li><b>块（block）</b> = 一张便签：大小固定，存固定个数的 token 的 K、V。vLLM 默认一块存 16 个，图里为了画得下，一块只放 4 个。</li><li><b>逻辑块（logical block）</b> = 你眼里的“第 1 张、第 2 张”：请求自己按顺序编号 0、1、2……，在它看来这些块是<b>连续</b>的。</li><li><b>物理块（physical block）</b> = 抽屉里真实的位置：GPU 显存里的真实块，可以散在任何地方。</li><li><b>块表（block table）</b> = 目录：记录“第几个逻辑块 → 第几号物理块”。</li></ul>
+<p>这和操作系统管内存的“分页”是同一个想法（块 ≈ 页，块表 ≈ 页表），所以叫 <b>PagedAttention</b>。</p>
+<p>读图：上面两行是请求 A（蓝）、请求 B（橙）眼里看到的逻辑块，下面一行是显存里真实的 8 个物理块，中间的连线就是块表。点 Next step，一共 5 步：</p>
+<ol><li><b>A 到达</b>：提示词有 6 个 token，只拿 2 张便签（逻辑块 0、1），目录记下它们在 7 号和 1 号物理块。</li><li><b>B 到达</b>：拿 2 张，放在 4 号和 6 号。A 和 B 的块在显存里交错摆放，但各自看起来都是连续的。</li><li><b>A 又生成 2 个 token</b>：写进最后一张便签的空位，不用拿新的。</li><li><b>A 的最后一块写满了</b>：这时才再拿一块（逻辑块 2 → 3 号物理块），目录里多一条线。</li><li><b>A 结束</b>：它的 3 块立刻还回空闲池（虚线框），下一个请求马上能用。B 不受影响。</li></ol>
+<div class="fig" data-fig="vlpage" id="fig-vlpage"></div><p class="cap">点 Next step 一步步看。上面两行是两个请求“以为自己看到的”连续的逻辑块，下面一行是 GPU 里真实的 8 块物理显存，中间的连线就是块表（蓝 = A，橙 = B）。橙色描边的格子是这一步新写入的 token：A 和 B 的块在显存里交错摆放，但各自看起来是连续的。</p>
+<p>这样，上一节的三种浪费就都解决了：<b>没有预留</b>（用多少拿多少）；<b>内部碎片</b>只剩最后一块里没写满的那几格（最多 15 个 token，而不是上千个）；<b>外部碎片</b>没有了（所有块一样大，任何空闲块都能给任何请求用，不会出现“总空间够，却凑不出一整块”）。</p>
+<div class="callout"><div class="ct">为什么 attention 能在“散落”的块上算？（原理推导）</div><p>判据：每个历史 token 的分数 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>&#x000B7;</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></math> 只用到它自己的 K，和别的 token 放在哪、挨不挨着无关。</p><ul><li>先回顾 attention 做什么：新 token 的 Query（<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi></mrow></math>）和每个历史 token 的 Key（<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>k</mi><mi>j</mi></msub></mrow></math>）点乘，得到分数 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>s</mi><mi>j</mi></msub><mo>&#x0003D;</mo><mi>q</mi><mo>&#x000B7;</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></math>；softmax 把分数变成权重 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>&#x003B1;</mi><mi>j</mi></msub><mo>&#x0003D;</mo><mstyle displaystyle="true" scriptlevel="0"><mfrac><mrow><msup><mi>e</mi><mrow><msub><mi>s</mi><mi>j</mi></msub></mrow></msup></mrow><mrow><msub><mo>&#x02211;</mo><mi>l</mi></msub><msup><mi>e</mi><mrow><msub><mi>s</mi><mi>l</mi></msub></mrow></msup></mrow></mfrac></mstyle></mrow></math>；最后对 Value 加权求和 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>o</mi><mo>&#x0003D;</mo><msub><mo>&#x02211;</mo><mi>j</mi></msub><msub><mi>&#x003B1;</mi><mi>j</mi></msub><msub><mi>v</mi><mi>j</mi></msub></mrow></math>。</li><li><b>第一步 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>&#x000B7;</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></math> 不怕散</b>：每个 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>j</mi></mrow></math> 各算各的，K 放在哪个块都行。内核查块表找到那一块，取出 K，就能算。</li><li><b>需要“整体”的只有 softmax</b>（要所有分数的总和）。办法是每个块先算自己的两样东西：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>&#x02211;</mo><msup><mi>e</mi><mrow><mi>s</mi></mrow></msup></mrow></math> 和 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>&#x02211;</mo><msup><mi>e</mi><mrow><mi>s</mi></mrow></msup><mi>v</mi></mrow></math>，最后把各块的加起来再相除，结果和一次算完完全一样。（实际实现还会减去最大分数来防止溢出，这就是 FlashAttention 一类算法用的“在线 softmax”。）</li><li>小例子：3 个历史 token，分数 2、1、3，对应的 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>v</mi></mrow></math> 是 1、2、3。块 X 存前两个：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>&#x02211;</mo><msup><mi>e</mi><mi>s</mi></msup><mo>&#x0003D;</mo><mn>7.39</mn><mo>&#x0002B;</mo><mn>2.72</mn><mo>&#x0003D;</mo><mn>10.11</mn></mrow></math>，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>&#x02211;</mo><msup><mi>e</mi><mi>s</mi></msup><mi>v</mi><mo>&#x0003D;</mo><mn>7.39</mn><mo>&#x000D7;</mo><mn>1</mn><mo>&#x0002B;</mo><mn>2.72</mn><mo>&#x000D7;</mo><mn>2</mn><mo>&#x0003D;</mo><mn>12.83</mn></mrow></math>。块 Y 存第三个：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>&#x02211;</mo><msup><mi>e</mi><mi>s</mi></msup><mo>&#x0003D;</mo><mn>20.09</mn></mrow></math>，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo>&#x02211;</mo><msup><mi>e</mi><mi>s</mi></msup><mi>v</mi><mo>&#x0003D;</mo><mn>20.09</mn><mo>&#x000D7;</mo><mn>3</mn><mo>&#x0003D;</mo><mn>60.26</mn></mrow></math>。合并：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">&#x00028;</mo><mn>12.83</mn><mo>&#x0002B;</mo><mn>60.26</mn><mo stretchy="false">&#x00029;</mo><mo>&#x000F7;</mo><mo stretchy="false">&#x00028;</mo><mn>10.11</mn><mo>&#x0002B;</mo><mn>20.09</mn><mo stretchy="false">&#x00029;</mo><mo>&#x02248;</mo><mn>2.42</mn></mrow></math>，和不分块直接算一样。</li><li>所以 PagedAttention 的 GPU 内核不要求 K、V 连续：它查块表，一块一块取出来算。代价是多了一次查表、内存访问不连续，内核要专门写（论文称之为 PagedAttention kernel）。</li></ul></div>
+<h2>相同的内容只存一份，要改的时候才复制</h2>
+<p>分页还带来一个意外的好处：<b>多个请求可以指向同一个物理块</b>。典型场景是并行采样（parallel sampling，同一个提示词生成多个候选回答）、束搜索（beam search），以及上一篇讲的前缀缓存。它们的提示词 K、V 完全一样，没必要存多份。</p>
+<p>共享的难点在于：谁往共享的块里写，会影响别人。vLLM 的做法和操作系统一样：给每个物理块记一个<b>引用计数</b>，写之前检查——计数大于 1 就先<b>写时复制（copy-on-write）</b>。</p>
+<div class="fig" data-fig="vlshare" id="fig-vlshare"></div><p class="cap">点 Next step。S1 先写：块 P1 被共享（ref=2），所以先复制成 P2 再写；S2 再写时 P1 只剩它一个人用（ref=1），原地写即可。</p>
+<p><b>前缀缓存</b>是同一个机制的延伸：请求结束后，物理块先不清空，按“内容哈希”留在池子里；下一个请求的开头如果哈希相同，块表直接指向这些块，不用重算。细节见《<i>图解 Prefix Caching</i>》。</p>
+<h2>调度器每一步都重新决定谁算，块不够就让出空间</h2>
+<p>有了块，就可以说清楚引擎是怎么转的。vLLM（V1）里引擎核心（EngineCore）只干一件事：反复调用 <code>step()</code>。每一步有三个阶段：</p>
+<ol><li><b>Schedule（调度）</b>：决定本步算哪些请求、各算几个 token。</li><li><b>Forward（前向）</b>：GPU 跑一遍模型，采样出下一个 token。</li><li><b>Postprocess（后处理）</b>：把新 token 追加到请求上，检查是否结束（EOS、长度上限、停止词）；结束了就把它的块还给池子。</li></ol>
+<p>调度阶段有两个队列：<b>running</b>（正在算的）和 <b>waiting</b>（排队的，默认先来先服务 FCFS，也可以按优先级）。调度器先给 running 里的请求续上下一个 token（必要时要新块），再从 waiting 里拉新请求，每拉一个都要问块管理器：<b>池子里够不够块？</b></p>
+<div class="fig" data-fig="vlsched" id="fig-vlsched"></div><p class="cap">点 Next step。左边是块池，右边是两个队列。注意第 4 步：池子空了，调度器必须让出空间。</p>
+<div class="callout"><div class="ct">块不够了怎么办？抢占（preemption）</div><p>判据：目标是让已经跑了很久的请求尽量不被打断。</p><ul><li>调度器会<b>抢占优先级最低的请求</b>（FCFS 下就是最后到的）：把它的块全部还给池子，把它放回 waiting 的前面。</li><li>被抢占的请求，等有空间时重新做一次 Prefill，把“原提示词 + 已生成的 token”重新算出 K、V。这叫<b>重算式抢占（recompute preemption）</b>。官方博客说明：V1 用的是重算；V0 还支持把 KV 换到 CPU 内存（swap）。</li><li>为什么重算可行？（原理推导）Prefill 是一次性并行算完一整段，比逐个 token 解码快得多，所以重算几百个 token 往往比通过 PCIe 来回搬运整块 KV 更划算。具体取舍请以官方文档和你的负载实测为准。</li></ul></div>
+<h2>把长提示词切成小块，正在生成的请求就不会被它卡住</h2>
+<p>先说两个词。<b>Prefill（预填充）</b>：用户的提示词一进来，要把整段提示词（可能几千个 token）一次性算完，写进 KV Cache。这一步是并行的，一次算很多 token，很吃算力。<b>Decode（解码）</b>：之后一个 token 一个 token 往外生成，每个请求每一步只算 1 个 token。</p>
+<div class="callout"><div class="ct">什么叫“吃算力”和“吃带宽”？（量级估算）</div><p>判据：看一步里，GPU 是在等计算，还是在等数据。</p><ul><li><b>算力</b>：GPU 每秒能做多少次乘加运算。<b>显存带宽</b>：显存每秒能把多少数据送到计算单元，可以想成仓库到工厂那条路有多宽（显存<b>容量</b>则是仓库有多大，两者不是一回事）。<b>吃算力</b> = 数据早就送到，计算单元忙不过来；<b>吃带宽</b> = 计算单元很快，却总在等数据。</li><li>拿一个 80 亿参数、FP16 的模型举例，权重约 16GB。显存带宽取 <a href="https://www.nvidia.com/h200">H200</a> 的 4.8TB/s：把权重读一遍要 16GB ÷ 4.8TB/s ≈ <b>3.3 毫秒</b>。</li><li><b>Decode 一步</b>只算 1 个 token，约 16 GFLOPs（参数量 × 2），按约 1000 TFLOPS 的量级只要约 0.016 毫秒。读数据比算数据慢约 200 倍，所以 Decode <b>吃带宽</b>。</li><li><b>Prefill</b> 读一遍权重就能算几千个 token，计算时间远超读取时间，所以 <b>吃算力</b>。</li><li>这也解释了为什么要把 batch size 做大：读一遍权重的 3.3 毫秒是固定的，同一步里约 200 个 token 一起算，才能把算力用满。（算力数字是我凭记忆取的约值，没有逐项核实。）</li></ul></div>
+<p><b>V1 是什么？</b> vLLM 有两代引擎：老的叫 V0，新的叫 V1，把核心循环和调度器重写了一遍（见官方博客《<a href="https://vllm.ai/blog/v1-alpha-release">vLLM V1: A Major Upgrade to vLLM's Core Architecture</a>》）。本文讲的 <code>step()</code> 循环、块管理，都是 V1 里的样子。</p>
+<p>现在有个问题：如果一步只做一种事，那么一个很长的提示词来了，这一步就全被它占了。正在生成的请求要等它算完才能吐出下一个 token，用户会看到输出突然卡一下。</p>
+<p><b>V1 的做法</b>：调度器不再把“Prefill 步”和“Decode 步”分开，而是给<b>每一步一个固定的工作量上限，叫 token 预算（token budget）</b>，比如每步最多算 8 个 token。分配顺序是：（1）每个正在解码的请求先拿 1 个 token（它们每步本来就只要 1 个）；（2）剩下的预算，分给排队的提示词做 Prefill。</p>
+<p>例子：预算 8，有 3 个请求正在解码，来了一个 20 个 token 的新提示词。每一步 3 个 token 给解码，剩下 5 个给新提示词，20 ÷ 5 = 4 步就算完了。这 4 步里，那 3 个请求每步都照常吐出 1 个 token，一次都没被打断。长提示词被切成小块、分几步算完，这就是 <b>Chunked Prefill（分块预填充）</b>。官方文档说明在可行时默认开启。</p>
+<div class="fig" data-fig="vlchunk" id="fig-vlchunk"></div><p class="cap">拖动滑块改变每步的 token 预算。预算越小，提示词被切得越碎，要更多步才能 Prefill 完，但解码中的请求每一步都不受打扰。</p>
+<p>预算大小是吞吐和延迟的取舍：预算大，GPU 利用率高、Prefill 快，但每步耗时变长；预算小，每步短、输出更平滑，但 Prefill 要拖更多步。</p>
+<h2>调度器和块管理器在同一个循环里互相配合</h2>
+<p>把前面的部分拼在一起。注意 <b>KV 缓存管理器</b>和<b>调度器</b>住在同一个循环里：调度器每分配一个 token，都要向块管理器要块；块管理器告诉调度器还有多少空位。</p>
+<div class="fig" data-fig="vlarch" id="fig-vlarch"></div><p class="cap">vLLM 的主干（简化）。API 服务器负责 HTTP、分词和反分词；EngineCore 里是调度器和块管理器；真正跑模型的是 GPU 上的 worker，它使用 PagedAttention 内核，并用 CUDA graph 减少内核启动开销。</p>
+<p>图里省略了很多东西：多 GPU 的张量并行、多个 API 进程、Prefill/Decode 分离部署、推测解码等等，后面的“进一步优化”会点到。</p>
+<h2>请求越短，分页比预留多装的请求越多；接近最大长度时两者没差别</h2>
+<p>回到最开头的问题：这能多装多少请求？用上面的数字（12GB 的 KV 区域、每个 token 0.8MB）算一下。旧做法按最大长度 2048 预留，只能装 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x0230A;</mi><mn>12000</mn><mo>&#x0002F;</mo><mn>1678</mn><mi>&#x0230B;</mi><mo>&#x0003D;</mo><mn>7</mn></mrow></math> 个；分页后每个请求只占自己真实长度（向上取整到 16 的倍数）。</p>
+<div class="fig" data-fig="vlcost" id="fig-vlcost"></div><p class="cap">拖动滑块改变请求的平均真实长度。请求越短（相对最大长度），旧做法浪费得越多，分页的收益越大；平均长度接近 2048 时，两者就没有差别了。</p>
+<p>这就是论文里“2–4 倍吞吐”的来源之一：<b>同样的显存能同时装下更多请求，而每一步 GPU 处理的批更大</b>，算力就被喂饱了（原理推导；论文的 2–4 倍是在特定模型、数据集和对比系统下测得的）。</p>
+<div class="callout"><div class="ct">分页不是免费的</div><p>判据：任何间接寻址都有成本。</p><ul><li>每个序列最多浪费最后一个块里没填满的槽位（块越大，这个浪费越大；块越小，块表越长、查表越多）。</li><li>PagedAttention 内核要通过块表读取不连续的显存。后来的 vAttention 论文认为这带来了编程和性能开销，并报告 vLLM 的内核比 FlashAttention-2 慢（他们的测试结果，我没有独立核实）。</li><li>分页解决的是<b>显存利用率</b>；它不会让单个请求的单步计算更快。</li></ul></div>
+<h2>这六项优化各管一个瓶颈，叠加在主干之上</h2>
+<p>下面每一项都是 vLLM 里的重要功能，本文只点出它和主干的关系，不展开。</p>
+<ul><li><b>Prefix Caching（前缀缓存）</b>：请求结束后块不立刻清空，按哈希复用。见《<i>图解 Prefix Caching</i>》。</li><li><b>Speculative Decoding（推测解码）</b>：用小模型先猜几个 token，大模型一次验证。每步可能产出不止 1 个 token，所以调度器计算“本步新增 token 数”时要考虑它。</li><li><b>Tensor Parallelism（张量并行）</b>：模型太大一块卡放不下时，把每层的矩阵切到多块 GPU 上，KV Cache 也跟着分到各卡。</li><li><b>Disaggregated Prefill/Decode（Prefill 与 Decode 分离）</b>：把 Prefill 和 Decode 拆到<b>不同的机器</b>上做：一批机器专门读提示词（Prefill，吃算力），另一批专门吐 token（Decode，吃显存带宽）。提示词在 Prefill 机器上算完后，把生成的 KV 块通过网络传给 Decode 机器，由它接着往下生成。这样两边互不干扰，各自按瓶颈配硬件、调参数；代价是要传 KV，提示词很短时不一定划算（原理推导）。</li><li><b>CUDA Graphs</b>：把一整串 GPU 操作预先录下来，运行时一次性重放，省掉每次启动内核的 CPU 开销（对短小的解码步特别有用）。</li><li><b>Quantization（量化）</b>：用更低的精度存权重（有时也存 KV），既省显存，也让同样的显存装更多请求。</li></ul>
+<h2>调优先看 KV 能装多少 token，而不是显存有多大</h2>
+<ol><li><b>先看 KV 能装多少</b>：启动日志里会报告 GPU KV Cache 的容量（以 token 计）。这个数字，而不是“显存多大”，才是并发能力的上限。</li><li><b><code>--gpu-memory-utilization</code></b>：vLLM 预留给自己的显存比例，扣掉权重和中间结果后，剩下的都划给 KV 块池。调高 = 块池更大，但要给其他进程留余地。</li><li><b><code>--max-model-len</code></b>：单个请求最长多少 token。设得比实际需要大，会让引擎认为单请求可能很贵，影响能同时接纳的请求数。按业务实际需要设。</li><li><b><code>--max-num-seqs</code> 与 <code>--max-num-batched-tokens</code></b>：前者限制同时运行的请求数，后者就是上面讲的每步 token 预算。它们影响吞吐与延迟的平衡。</li><li><b>同一个前缀的请求尽量走同一个实例</b>：前缀缓存只在单个引擎内生效；前缀放在提示词最前面，易变的内容（时间戳、用户名）放在最后。</li><li><b>看监控，不要猜</b>：关注排队的请求数（waiting）、KV 块池的使用率、以及抢占次数。抢占频繁说明块池太小或并发太高。</li><li><b>各参数的默认值和 V0/V1 的差别会随版本变</b>：以你所用版本的官方文档为准，本文没有核实每个默认值。</li></ol>
+<h2>停车场画成小格子，车来了才给格子，就几乎没有浪费</h2>
+<ol><li>GPU 像一个大停车场，每辆车就是一个正在聊天的请求。</li><li>以前的做法：每辆车来的时候，不管它多大，都先给它圈一大片连续的车位，万一它想长大呢？结果车位大半都空着，别的车进不来。</li><li>vLLM 的做法：把停车场画成很多小格子。车来了，先给一两个格子；它需要更多，再给一格。格子不用挨在一起。</li><li>每辆车拿着一张小纸条，上面写着“我的第 1 格在 7 号、第 2 格在 1 号……”。这就是块表。</li><li>有两辆车要装同样的东西？它们的纸条指向同一个格子，只存一份；谁要改，就先复印一份给他。</li><li>车开走了，格子马上空出来给下一辆。停车场几乎没有浪费，能停下的车多了好几倍。</li></ol>
+<h2>显存才是瓶颈：分页加上每步调度，让同一块 GPU 多服务几倍请求</h2>
+<ul><li><b>问题在显存：</b>13B 模型的 A100 上，KV Cache 只占约 30% 的显存，决定了并发请求数。</li><li><b>旧做法浪费：</b>按最大长度连续预留，只有 20.4%–38.2% 真正存了 token。</li><li><b>PagedAttention：</b>固定大小的块 + 块表，按需分配，浪费降到最后一块的零头，论文测得 96.3% 有效。</li><li><b>共享：</b>引用计数 + 写时复制，并行采样和前缀缓存的基础。</li><li><b>调度：</b>每个 step 先调度、再前向、后处理；用 token 预算混合 Prefill 和 Decode；块不够时重算式抢占。</li><li><b>代价：</b>间接寻址有开销，内核要专门写；分页不加速单个请求的单步计算。</li></ul>
+<h2>继续探索</h2>
+<ul><li><a href="https://arxiv.org/abs/2309.06180">Efficient Memory Management for Large Language Model Serving with PagedAttention</a>（Kwon et al., SOSP 2023）：原始论文，本文的 20.4%–38.2%、96.3%、0.8MB/token 都来自这里。</li><li><a href="https://vllm.ai/blog/anatomy-of-vllm">Inside vLLM: Anatomy of a High-Throughput LLM Inference System</a>（vLLM 官方博客，2025-09）：V1 引擎的逐步讲解，<code>step()</code>、块分配、抢占都可以在这里对着源码看。</li><li><a href="https://vllm.ai/blog/v1-alpha-release">vLLM V1: A Major Upgrade to vLLM's Core Architecture</a>：V1 架构的设计动机。</li><li><a href="https://docs.vllm.ai/en/latest/usage/v1_guide/">vLLM 文档：V1 Guide</a>：V1 与 V0 的差别（统一调度器、默认开启的功能等）。</li><li><a href="https://arxiv.org/abs/2405.04437">vAttention</a>：另一种思路，不改内核，用 GPU 的虚拟内存机制实现动态分配。</li><li><a href="https://platform.openai.com/docs/api-reference/completions/create">OpenAI Completions：max_tokens</a> 与 <a href="https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create">Chat Completions：max_completion_tokens</a>（2026-11-24 查阅）：只限制本次再生成的 token，不算 prompt；prompt 加上这个上限不能超过模型 context。</li><li><a href="https://docs.vllm.ai/en/stable/api/vllm/sampling_params/">vLLM SamplingParams</a>：<code>max_tokens</code> 是每条输出最多再生成多少个 token。</li></ul>
+</div><script>/* illustrated-explainer core: helpers + boot. Put your FIGS.<id> = (root)=>{...} functions between the two parts. */
+/* Figures in the visual language of "The Illustrated Transformer":
+   green = embedding x, purple = Query, orange = Key, blue = Value, pink = output z.
+   self-attention = peach box, feed-forward = light-blue box, decoder = pink outline. */
+const ROLE={x:'#b5e0a1',q:'#dcbef2',k:'#fcc990',v:'#a9cbf3',z:'#f6b2c8'};
+const TXT={x:'#6cc04a',q:'#b06fdc',k:'#f0a04b',v:'#5b9be0',z:'#e8789f'};
+const FIGS={};
+function el(tag,cls,html,st){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;if(st)Object.assign(e.style,st);return e}
+function vec(role,n=4,seed=1,sz=22){const v=el('span','vec');for(let i=0;i<n;i++){const c=el('i');c.style.background=ROLE[role];c.style.width=c.style.height=sz+'px';
+  c.style.boxShadow=`inset 0 0 0 60px rgba(255,255,255,${(0.42*Math.abs(Math.sin(seed*7.1+i*3.3))).toFixed(2)})`;v.appendChild(c)}return v}
+function chip(t,role,extra){const c=el('span','chip',t);c.style.background=ROLE[role]||'#fff';c.style.borderColor=role?'#6a6a6a':'#bbb';if(extra)Object.assign(c.style,extra);return c}
+const AV=(len=26)=>`<svg class="ar" width="12" height="${len}" viewBox="0 0 12 ${len}"><line x1="6" y1="${len}" x2="6" y2="7" stroke="#555" stroke-width="2"/><path d="M1 9 L6 0 L11 9 Z" fill="#555"/></svg>`;
+const AH=(len=34)=>`<svg class="ar" width="${len}" height="12" viewBox="0 0 ${len} 12"><line x1="0" y1="6" x2="${len-7}" y2="6" stroke="#555" stroke-width="2"/><path d="M${len-9} 1 L${len} 6 L${len-9} 11 Z" fill="#555"/></svg>`;
+const sub=(s)=>`<sub>${s}</sub>`;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const wrapOut=c=>{const d=el('div','dout');d.append(c);return d};
+function kvg(role,seed){const g=el('span','kvg');g.append(vec(role,2,seed,11),el('small','',role.toUpperCase()));g.lastChild.style.color=TXT[role];return g}
+function pauseBtn(r,ctrl){const a=el('a','pb','⏸ Pause');r._pa=a;a.onclick=()=>setPaused(r,!r._paused);ctrl.append(' · ',a)}
+function setPaused(r,v){r._paused=v;if(r._pa)r._pa.textContent=v?'▶ Resume':'⏸ Pause'}
+const unpause=r=>setPaused(r,false);
+async function psleep(r,ms){let t=0;while(t<ms){await sleep(50);if(!r._paused)t+=50}}
+
+
+/* ===== add figures here: FIGS.myfig=(r)=>{...; r._f={play,final}} ===== */
+/* vLLM figures. Prefix vl. Colors per request: */
+const VC=['#a9cbf3','#fcc990','#b5e0a1','#dcbef2','#f6b2c8','#f3e08a'];
+const VN='ABCDEF';
+/* vlGrid(rows,cols,size): ONE size drives both the grid track and the cell box, so cells can never overflow their track or the box around them */
+const vlGrid=(rows,cols,size=22)=>{const g=el('div','vlg');g.style.gridTemplateColumns=`repeat(${cols},${size}px)`;const cells=[];for(let i=0;i<rows;i++){cells.push([]);for(let j=0;j<cols;j++){const c=el('div','vlc');c.style.width=c.style.height=size+'px';g.append(c);cells[i].push(c)}}return {g,cells}};
+/* generic stepper footer: caption + Replay/Pause/Prev/Next */
+function vlStepper(r,caps,render,ms,fin){
+  const cap=el('div','vlcap'),ctrl=el('div','ctrl'),b1=el('a','','▶ Replay'),b2=el('a','','Next step'),b0=el('a','','Prev step');
+  ctrl.append(b1);pauseBtn(r,ctrl);ctrl.append(' · ',b0,' · ',b2);r.append(cap,ctrl);
+  let step=0,tm=null;const last=caps.length-1;
+  const show=n=>{step=n;render(n);cap.textContent=caps[n]};
+  const play=()=>{unpause(r);clearInterval(tm);show(0);tm=setInterval(()=>{if(r._paused)return;if(step>=last){clearInterval(tm);return}show(step+1)},ms||2200)};
+  b1.onclick=play;b2.onclick=()=>{setPaused(r,true);show(Math.min(last,step+1))};b0.onclick=()=>{setPaused(r,true);show(Math.max(0,step-1))};
+  r._f={play,final:()=>{clearInterval(tm);show(fin==null?last:fin)}};show(0)}
+
+/* 0 opening phenomenon: requests arrive at different times, lengths differ, 4 slots */
+FIGS.vlarrive=(r)=>{
+  const L=[3,8,4,6,4,3],ARR=[1,1,2,2,3,5],S=4,T=8;
+  const grid=Array.from({length:S},()=>Array(T).fill(-1));
+  const waited=Array.from({length:T},()=>-1);
+  const rem=Array(S).fill(0),who=Array(S).fill(-1),queue=[];
+  for(let t=0;t<T;t++){
+    for(let q=0;q<6;q++)if(ARR[q]===t+1)queue.push(q);
+    for(let i=0;i<S;i++)if(rem[i]===0)who[i]=-1;
+    for(let i=0;i<S&&queue.length;i++)if(who[i]===-1){const q=queue.shift();who[i]=q;rem[i]=L[q]}
+    waited[t]=queue.length?queue[0]:-1;
+    for(let i=0;i<S;i++)if(who[i]>=0&&rem[i]>0){grid[i][t]=who[i];rem[i]--}
+  }
+  const EX=['Say hi','Write essay','Weather?','Summarize','Translate','Say OK'];
+  const head=el('div','vla-h','batch size = 4 <span>· each cell = 1 decode step = 1 token · longer bar = longer answer</span>');
+  const chips=el('div','vla-chips'),chipEls=[];
+  for(let i=0;i<6;i++){
+    const c=el('div','vla-chip',`<b>${VN[i]} · ${EX[i]}</b><small>needs ${L[i]} steps</small><small>arrives step ${ARR[i]}</small>`);
+    chips.append(c);chipEls.push(c);
+  }
+  const board=el('div','vla-board');
+  board.append(el('div','vla-lab vla-axis','Decode step <span>→</span>'));
+  const nums=[];
+  for(let j=0;j<T;j++){const n=el('div','vla-num',String(j+1));nums.push(n);board.append(n)}
+  const cells=[];
+  for(let i=0;i<S;i++){
+    board.append(el('div','vla-lab',`Row ${i+1}`));
+    cells.push([]);
+    for(let j=0;j<T;j++){const c=el('div','vla-cell');cells[i].push(c);board.append(c)}
+  }
+  board.append(el('div','vla-lab','Queue <span>waiting</span>'));
+  const qcells=[];
+  for(let j=0;j<T;j++){const c=el('div','vla-cell q');qcells.push(c);board.append(c)}
+  const tag=el('div','vla-tag','\u00a0');
+  r.append(head,chips,board,tag);
+  const STEPS=[
+    {t:1,tag:'A and B sit down',cap:'Step 1. A ("Say hi", 3 steps) and B ("Write essay", 8 steps) arrive and take two rows of the batch. Two rows are still empty.'},
+    {t:2,tag:'Batch full (4 of 4)',cap:'Step 2. C ("Weather?", 4 steps) and D ("Summarize", 6 steps) arrive and take the last two rows. The batch is full: 4 of 4.'},
+    {t:3,tag:'E waits',cap:'Step 3. E ("Translate") arrives. The batch is full, so E waits in the queue row. A is on its last step.'},
+    {t:4,tag:'A leaves, E sits, B stays',cap:'Step 4. A is done after 3 steps and frees row 1. E sits down. B, the long essay, is only half done and keeps row 2.'},
+    {t:5,tag:'F waits',cap:'Step 5. F ("Say OK") arrives while the batch is full, so F waits. C is on its last step.'},
+    {t:6,tag:'C leaves, F sits',cap:'Step 6. C is done and frees a row. F sits down. B keeps running.'},
+    {t:8,tag:'Short ones leave · B stays through step 8',cap:'Whole picture: short requests finish early and free their rows; B holds one row for all 8 steps. E and F each waited one step.'}
+  ];
+  const paint=(k)=>{
+    const t=STEPS[k].t,last=k===STEPS.length-1;
+    chipEls.forEach((c,i)=>{
+      const on=ARR[i]<=t;
+      c.style.background=on?VC[i]:'#fff';
+      c.style.borderColor=on?'#6a6a6a':'#e0e0e0';
+    });
+    for(let i=0;i<S;i++)for(let j=0;j<T;j++){
+      const c=cells[i][j],id=grid[i][j],show=j<t&&id>=0;
+      c.textContent=show?VN[id]:'';
+      c.style.background=show?VC[id]:'#e8e8e8';
+      c.classList.remove('on');
+    }
+    qcells.forEach((c,j)=>{
+      const id=waited[j],show=j<t&&id>=0;
+      c.textContent=show?VN[id]:'';
+      c.style.background=show?VC[id]:'#fff';
+      c.style.borderColor=show?'#6a6a6a':'#ddd';
+      c.classList.remove('on');
+    });
+    nums.forEach((n,j)=>{n.style.color=j<t?(j===t-1?'#c0602a':'#888'):'#ccc';n.style.fontWeight=j===t-1?'700':'400'});
+    const mark=(c)=>{if(c)c.classList.add('on')};
+    if(last){qcells.forEach((c,j)=>{if(waited[j]>=0)mark(c)})}
+    else{
+      const j=t-1;
+      for(let i=0;i<S;i++)if(grid[i][j]>=0)mark(cells[i][j]);
+      if(waited[j]>=0)mark(qcells[j]);
+    }
+    tag.textContent=STEPS[k].tag;
+  };
+  vlStepper(r,STEPS.map(s=>s.cap),paint,2400,STEPS.length-1);
+};
+
+/* 1 static vs continuous batching — stepper on the key moments (not a paint-fill) */
+FIGS.vlbatch=(r)=>{
+  const L=[3,8,4,6,4,3],T=12,S=4;
+  const st=Array.from({length:S},()=>Array(T).fill(-1));
+  [[0,1,2,3],[4,5]].forEach((b,bi)=>{const s=bi?8:0;b.forEach((q,i)=>{for(let t=0;t<L[q];t++)st[i][s+t]=q})});
+  const ct=Array.from({length:S},()=>Array(T).fill(-1));const q=[4,5],rem=[0,0,0,0],cur=[-1,-1,-1,-1];
+  for(let t=0;t<T;t++)for(let i=0;i<S;i++){if(rem[i]==0){if(t==0&&i<4){cur[i]=i}else if(q.length){cur[i]=q.shift()}else{cur[i]=-1}rem[i]=cur[i]>=0?L[cur[i]]:0}
+    if(rem[i]>0){ct[i][t]=cur[i];rem[i]--}}
+  const endOf=m=>Math.max(...m.map(row=>row.reduce((a,v,t)=>v>=0?t+1:a,0)));
+  const Es=endOf(st),Ec=endOf(ct);
+  const STEPS=[
+    {t:1,cap:'Batch size = 4. A–D sit down; E and F wait. Each colored cell = one decode step (one token). A needs 3 steps, B needs 8.',
+     hl:null,tag:null},
+    {t:3,cap:'Step 3: A is done. Look at the top row — Static leaves that row empty (pink-gray = waste). Continuous is about to refill it.',
+     hl:{panel:'both',cells:[[0,2]]},tag:'A finishes'},
+    {t:4,cap:'Step 4: Continuous puts waiting E into A’s freed row. Static still has an empty seat — it is waiting for slow B to finish the whole batch.',
+     hl:{panel:'ct',cells:[[0,3]]},tag:'E enters (continuous only)'},
+    {t:5,cap:'Step 5: C finished too; Continuous admits F into that row. Static’s idle “bubbles” keep growing while B still runs.',
+     hl:{panel:'ct',cells:[[2,4]]},tag:'F enters (continuous only)'},
+    {t:8,cap:'Step 8: B (slowest) finally ends → Static’s first batch is over, so E and F may start. Continuous already finished all 6.',
+     hl:{panel:'st',cells:[[1,7]]},tag:'Static’s batch finally ends'},
+    {t:12,cap:`Same 6 requests. Static: ${Es} steps · ${Math.round(st.flat().filter(v=>v>=0).length/(S*Es)*100)}% busy. Continuous: ${Ec} steps · ${Math.round(ct.flat().filter(v=>v>=0).length/(S*Ec)*100)}% busy. Pink-gray = GPU sitting idle.`,
+     hl:null,tag:null}
+  ];
+  const mk=(title,m,key)=>{
+    const p=el('div','vlpan');p.style.width='369px';const h5=el('h5','',title);h5.style.cssText='height:40px;display:flex;align-items:center;justify-content:center;line-height:1.25;margin:0 0 6px';p.append(h5);
+    const wait=el('div','vlwait');wait.style.cssText='height:28px;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:4px';
+    const {g,cells}=vlGrid(S,T,28);cells.flat().forEach(c=>{c.style.fontSize='13px'});p.append(wait,g);
+    const axis=el('div','vlaxis');axis.style.cssText='display:grid;gap:3px;justify-content:center;margin:2px auto 0;font-size:11px;color:#aaa;grid-template-columns:repeat('+T+',28px)';
+    for(let j=0;j<T;j++){const d=el('div','',(j+1)%2===1||j===T-1?String(j+1):'');d.style.textAlign='center';axis.append(d)}
+    p.append(axis);
+    const n=el('div','vlnote');n.style.height='40px';n.style.lineHeight='1.3';n.style.whiteSpace='normal';p.append(n);
+    return {p,cells,m,n,wait,key}};
+  const A=mk('Static batching — wait for the whole batch',st,'st');
+  const B=mk('Continuous batching — refill a row the moment it frees',ct,'ct');
+  const row=el('div','');row.style.cssText='display:flex;justify-content:center;gap:20px';row.append(A.p,B.p);
+  const legend=el('div','vlnote','');legend.style.height='auto';legend.style.marginTop='8px';
+  legend.innerHTML=[0,1,2,3,4,5].map(i=>`<span style="display:inline-block;width:14px;height:14px;background:${VC[i]};border:1px solid #bbb;vertical-align:-2px"></span> ${VN[i]}(${L[i]})`).join(' &nbsp; ')+
+    ' &nbsp; <span style="display:inline-block;width:14px;height:14px;background:#f0c8c8;border:1px solid #d5a0a0;vertical-align:-2px"></span> idle / waste';
+  const badge=el('div','vlbadge');badge.style.cssText='height:22px;font-size:13px;color:#c0602a;font-weight:600;text-align:center;margin-top:4px';
+  r.append(row,legend,badge);
+  const notYet=(m,t)=>{
+    const seen=new Set();for(let i=0;i<S;i++)for(let j=0;j<t;j++)if(m[i][j]>=0)seen.add(m[i][j]);
+    return [0,1,2,3,4,5].filter(q=>!seen.has(q));
+  };
+  const paint=(P,t,hlCells)=>{
+    P.cells.forEach((rw,i)=>rw.forEach((c,j)=>{
+      c.classList.remove('vlhl');
+      const v=P.m[i][j];
+      if(j<t){if(v>=0){c.style.background=VC[v];c.textContent=VN[v]}else{c.style.background='#f0c8c8';c.textContent=''}}
+      else{c.style.background='#f4f4f4';c.textContent=''}
+    }));
+    (hlCells||[]).forEach(([i,j])=>{const c=P.cells[i]&&P.cells[i][j];if(c)c.classList.add('vlhl')});
+    const w=notYet(P.m,t);
+    P.wait.innerHTML='';
+    if(w.length){P.wait.append(el('span','',`<span style="color:#999;font-size:12px">waiting · </span>`));w.forEach(q=>P.wait.append(chip(VN[q]+'('+L[q]+')',null,{background:VC[q],margin:'0'})))}
+    else P.wait.append(el('span','',`<span style="color:#bbb;font-size:12px">waiting · empty</span>`));
+    const e=endOf(P.m),busy=P.m.flat().filter(v=>v>=0).length,shown=Math.min(t,e);
+    if(t>=e)P.n.innerHTML=`All 6 done at step <b>${e}</b> · batch utilization <b>${Math.round(busy/(S*e)*100)}%</b>`;
+    else if(t>0){const idle=S*shown-P.m.map(row=>row.slice(0,shown).filter(v=>v>=0).length).reduce((a,b)=>a+b,0);P.n.innerHTML=`Through step <b>${shown}</b> · idle cells so far <b>${idle}</b>`}
+    else P.n.innerHTML='&nbsp;';
+  };
+  const render=(k)=>{
+    const s=STEPS[k];
+    const hlSt=s.hl&&(s.hl.panel==='st'||s.hl.panel==='both')?s.hl.cells:null;
+    const hlCt=s.hl&&(s.hl.panel==='ct'||s.hl.panel==='both')?s.hl.cells:null;
+    paint(A,s.t,hlSt);paint(B,s.t,hlCt);
+    badge.textContent=s.tag||'\u00a0';
+  };
+  vlStepper(r,STEPS.map(s=>s.cap),render,2800,STEPS.length-1);
+};
+
+/* 2 where the GPU memory goes */
+FIGS.vlmem=(r)=>{
+  const seg=(w,bg,t)=>{const d=el('div','',t);d.style.width=w+'%';d.style.background=bg;return d};
+  const bar=(parts)=>{const b=el('div','vlbar');parts.forEach(p=>b.append(seg(...p)));return b};
+  r.append(el('div','vlbl','One A100 40GB GPU serving a 13B-parameter model (FP16) — paper’s example'));
+  r.append(bar([[65,'#e6e6e6','Model weights · 26 GB (65%)'],[30,ROLE.v,'KV Cache · ≈ 12 GB (&gt;30%)'],[5,'#f7f7f7','Other']]));
+  r.append(el('div','vlbl','Inside the KV Cache region: how much holds real tokens? (paper, Figure 2)'));
+  r.append(el('div','vlbl','Earlier systems: pre-allocate the maximum length'));
+  r.append(bar([[20.4,ROLE.x,'20.4%'],[17.8,'#d6efc9','up to 38.2%'],[61.8,'#f7b9b9','reserved / fragmented / unused']]));
+  r.append(el('div','vlbl','vLLM: allocate small blocks on demand'));
+  r.append(bar([[96.3,ROLE.x,'96.3% real tokens'],[3.7,'#f7b9b9','']]));
+  r.append(el('div','vlbl','<span style="background:'+ROLE.x+';padding:0 7px">&nbsp;</span> holds a token’s K,V &nbsp; <span style="background:#f7b9b9;padding:0 7px">&nbsp;</span> wasted &nbsp; (range = the earlier systems measured in the paper)'));
+  r._f={play:null,final:()=>{}}};
+
+/* 3 paged attention: logical blocks -> block table -> physical blocks */
+FIGS.vlpage=(r)=>{
+  /* fixed-coordinate stage (no measuring, so zoom-safe): logical rows on top, block-table arrows in the middle, physical blocks at the bottom */
+  const BS=4,PW=84,GAP=8,STEP=PW+GAP,W=8*STEP-GAP,MA=[7,1,3],MB=[4,6],COL=[VC[0],VC[1]],STK=['#4a7fc4','#d4872f'];
+  const Y={la:20,pl:190,bh:58},XB=W-(2*STEP-GAP); // block height 58
+  const S=[{a:6,b:0,hot:{},arr:{A:[0,1]},t:'Request A arrives with a 6-token prompt. It sees two logical blocks, 0 and 1, side by side. The block table (the arrows) maps them to physical blocks 7 and 1. Only 2 blocks are allocated, not room for the 2048-token maximum.'},
+   {a:6,b:5,hot:{},arr:{B:[0,1]},t:'Request B arrives with 5 tokens and gets physical blocks 4 and 6. Both requests see a tidy row of blocks; in GPU memory A and B are interleaved. Nobody needs a contiguous region.'},
+   {a:8,b:5,hot:{A:[6,8]},arr:{},t:'A decodes 2 more tokens. They fill the empty slots of its last block (logical 1, physical 1): nothing new is allocated.'},
+   {a:9,b:5,hot:{A:[8,9]},arr:{A:[2]},t:'A needs a 9th slot but its last block is full. Exactly ONE new block is allocated: logical block 2 → physical block 3 (a new arrow).'},
+   {a:0,b:5,hot:{},arr:{},t:'A finishes. Its 3 blocks go back to the free pool at once (dashed), ready for the next request. B keeps its blocks.'}];
+  const stage=el('div','vlpg-stage');stage.style.width=W+'px';
+  const info=el('div','vlnote');
+  r.append(stage,info);
+  const blk=(x,y,title,n,color,hot,free)=>{ // one block: title + 4 token cells; n filled; hot=[from,to) token idx (global) already offset by caller
+    const b=el('div','vlpg-blk'+(free?' free':''));b.style.cssText=`left:${x}px;top:${y}px;width:${PW}px;height:${Y.bh}px`;
+    b.append(el('small','',title));const g=el('div','vlpg-cells');
+    for(let k=0;k<BS;k++){const c=el('div','vlpg-c'+(k<n?' on':'')+(hot&&hot(k)?' hot':''));if(k<n)c.style.background=color;g.append(c)}
+    b.append(g);return b};
+  const render=(k)=>{const s=S[k];stage.innerHTML='';
+    const lab=(x,y,txt)=>{const d=el('div','vlpg-lab',txt);d.style.top=y+'px';d.style.left=x+'px';stage.append(d)};
+    lab(0,0,'<b>Request A sees</b> · logical blocks in a row');
+    lab(0,0,'<b>Request B sees</b> · logical blocks in a row');stage.lastChild.style.cssText+=';left:auto;right:0';
+    lab(0,Y.pl+Y.bh+6,'<b>GPU memory</b> · physical blocks, in any order · lines = block table');
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width',W);svg.setAttribute('height',Y.pl);svg.style.cssText='position:absolute;left:0;top:0;pointer-events:none';stage.append(svg);
+    const own=Array(8).fill(null);
+    [['A',s.a,MA,0,0],['B',s.b,MB,1,XB]].forEach(([nm,n,M,ci,x0])=>{const y=Y.la;
+      const nb=Math.ceil(n/BS),hot=s.hot[nm],newb=s.arr[nm]||[];
+      for(let i=0;i<nb;i++){
+        const fill=Math.min(BS,n-i*BS),isHot=t=>hot&&i*BS+t>=hot[0]&&i*BS+t<hot[1];
+        stage.append(blk(x0+i*STEP,y,`logical ${i}`,fill,COL[ci],isHot,false));
+        const p=M[i];own[p]=[nm,fill,COL[ci],isHot];
+        const x1=x0+i*STEP+PW/2,y1=y+Y.bh,x2=p*STEP+PW/2,y2=Y.pl;
+        const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d',`M${x1} ${y1} C${x1} ${y1+(y2-y1)*.55},${x2} ${y2-(y2-y1)*.55},${x2} ${y2}`);
+        path.setAttribute('fill','none');path.setAttribute('stroke',STK[ci]);path.setAttribute('stroke-width',newb.includes(i)?3:1.8);path.setAttribute('opacity',newb.includes(i)?1:.55);
+        svg.append(path);
+        const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',x2);dot.setAttribute('cy',y2);dot.setAttribute('r',3.5);dot.setAttribute('fill',STK[ci]);svg.append(dot)}
+    });
+    for(let p=0;p<8;p++){const o=own[p];
+      if(o){const i=(o[0]==='A'?MA:MB).indexOf(p);const hot=s.hot[o[0]];stage.append(blk(p*STEP,Y.pl,`P${p} · ${o[0]}`,o[1],o[2],t=>hot&&i*BS+t>=hot[0]&&i*BS+t<hot[1],false))}
+      else stage.append(blk(p*STEP,Y.pl,`P${p} · free`,0,'#fff',null,true))}
+    info.innerHTML=`Free blocks: <b>${own.filter(x=>!x).length}</b> / 8 &nbsp;·&nbsp; each block = ${BS} token slots here (a real block holds 16)`};
+  stage.style.height=(Y.pl+Y.bh+26)+'px';
+  vlStepper(r,S.map(s=>s.t),render,2800,3)};
+
+/* 4 sharing + copy-on-write */
+FIGS.vlshare=(r)=>{
+  const S=[{t:'Parallel sampling: two samples (S1, S2) of one prompt. Both block tables point at the SAME physical blocks — the prompt’s K,V are stored once. Each block keeps a reference count.',
+     b:[[4,2,'P0'],[2,2,'P1']],s1:['P0','P1'],s2:['P0','P1']},
+   {t:'S1 wants to write its next token into block P1, but P1 is shared (ref = 2). Copy-on-write: copy P1 into a new block P2, point S1 at it, write there. P1’s ref drops to 1.',
+     b:[[4,2,'P0'],[2,1,'P1'],[3,1,'P2']],s1:['P0','P2'],s2:['P0','P1']},
+   {t:'S2 writes into P1. Its ref is now 1, so S2 is the only user: write in place, no copy. Only the one block that diverged was ever duplicated.',
+     b:[[4,2,'P0'],[3,1,'P1'],[3,1,'P2']],s1:['P0','P2'],s2:['P0','P1']}];
+  const tabs=el('div','vlrow'),phys=el('div','');phys.style.cssText='height:84px;text-align:center';
+  const mk=(n)=>{const p=el('div','vlpan');p.append(el('h5','',`${n} · block table`));const t=el('table','vltb');p.append(t);return {p,t}};
+  const T1=mk('Sample S1'),T2=mk('Sample S2');tabs.append(T1.p,T2.p);tabs.style.marginBottom='14px';tabs.style.gap='80px';
+  r.append(tabs,el('div','lab2','Physical blocks (token count shown inside, ref = how many tables point here)'),phys);
+  const col={P0:VC[2],P1:VC[3],P2:VC[1]};
+  const render=(k)=>{const s=S[k];const t=(T,m)=>{T.innerHTML='<tr><th>logical</th><td>0</td><td>1</td></tr><tr><th>physical</th>'+m.map(x=>`<td style="background:${col[x]}">${x}</td>`).join('')+'</tr>'};t(T1.t,s.s1);t(T2.t,s.s2);
+    phys.innerHTML='';s.b.forEach(([n,ref,id])=>{const b=el('div','vlpb');b.style.margin='3px 26px';b.append(el('small','',`${id} · ref = ${ref}`));const {g,cells}=vlGrid(1,4,28);cells[0].forEach((c,j)=>{if(j<n){c.style.background=col[id]}});b.append(g);phys.append(b)})};
+  vlStepper(r,S.map(s=>s.t),render,3200)};
+
+/* 5 scheduler: waiting / running / block pool, preemption */
+FIGS.vlsched=(r)=>{
+  const P=12;
+  const S=[{t:'Three requests wait. The block pool has 12 free blocks. Each engine step starts with the scheduler.',run:{},wait:['A','B','C']},
+   {t:'Step 1: admit A, B, C (prefill). Each needs 3 blocks → 9 used, 3 free.',run:{A:3,B:3,C:3},wait:[]},
+   {t:'Decoding: every request fills its last block and grabs a new one. The pool is empty (0 free).',run:{A:4,B:4,C:4},wait:[]},
+   {t:'Next step all three need another block, but 0 are free → preempt C (the latest arrival): free its 4 blocks and push it back to waiting.',run:{A:4,B:4},wait:['C']},
+   {t:'A and B continue and take 5 blocks each. 2 free.',run:{A:5,B:5},wait:['C']},
+   {t:'A finishes (EOS): its 5 blocks go back to the pool. 7 free.',run:{B:5},wait:['C']},
+   {t:'C is re-admitted. Its prompt and the tokens it had produced are prefilled again (recompute preemption). Back to full speed.',run:{B:5,C:4},wait:[]}];
+  const pool=vlGrid(2,6);pool.g.style.gridTemplateColumns='repeat(6,34px)';pool.cells.flat().forEach(c=>{c.style.width=c.style.height='34px'});
+  const col={A:VC[0],B:VC[1],C:VC[2]};
+  const row=el('div','vlrow');const pp=el('div','vlpan');pp.append(el('h5','','KV block pool (12 blocks)'),pool.g);
+  const qq=el('div','vlpan');qq.style.width='330px';const wq=el('div','vlq'),rq=el('div','vlq');qq.append(el('h5','','waiting queue (FCFS)'),wq,el('h5','','running queue'),rq);
+  row.append(pp,qq);const info=el('div','vlnote');r.append(row,info);
+  const render=(k)=>{const s=S[k];let i=0;const flat=pool.cells.flat();flat.forEach(c=>c.style.background='#f4f4f4');
+    Object.entries(s.run).forEach(([n,b])=>{for(let j=0;j<b;j++){const c=flat[i++];c.style.background=col[n];c.textContent=n}});flat.forEach((c,j)=>{if(j>=i)c.textContent=''});
+    wq.innerHTML='';s.wait.forEach(n=>wq.append(chip(n,null,{background:col[n]})));if(!s.wait.length)wq.append(el('span','','<span style="color:#bbb">empty</span>'));
+    rq.innerHTML='';Object.entries(s.run).forEach(([n,b])=>rq.append(chip(`${n} · ${b} blocks`,null,{background:col[n]})));if(!Object.keys(s.run).length)rq.append(el('span','','<span style="color:#bbb">empty</span>'));
+    info.innerHTML=`Free blocks: <b>${P-i}</b> / ${P}`};
+  vlStepper(r,S.map(s=>s.t),render,2800)};
+
+/* 6 chunked prefill with a token budget slider */
+FIGS.vlchunk=(r)=>{
+  const PL=20,D=3;let bud=8;
+  const sl=el('div','vlsl');const inp=el('input');inp.type='range';inp.min=5;inp.max=16;inp.value=bud;const lab=el('b','','');sl.append('Token budget per step',inp,lab);
+  const wrap=el('div','');wrap.style.cssText='height:290px;display:flex;justify-content:center;align-items:flex-end;gap:5px';
+  const info=el('div','vlnote');info.style.cssText+=';height:70px;white-space:normal;max-width:500px;margin:6px auto 0';
+  r.append(sl,wrap,el('div','vlnote','<span style="display:inline-block;width:14px;height:14px;background:'+VC[0]+';border:1px solid #bbb;vertical-align:-2px"></span> decode tokens (3 running requests) &nbsp; <span style="display:inline-block;width:14px;height:14px;background:'+VC[4]+';border:1px solid #bbb;vertical-align:-2px"></span> prefill tokens (a new 20-token prompt)'),info);
+  const draw=()=>{bud=+inp.value;lab.textContent=bud;wrap.innerHTML='';
+    const chunk=bud-D;let left=PL,steps=0;const cols=[];while(left>0){const c=Math.min(chunk,left);cols.push(c);left-=c;steps++}
+    const maxc=Math.ceil(PL/(5-D));
+    cols.forEach((c,i)=>{const col=el('div','');col.style.cssText='display:flex;flex-direction:column-reverse;gap:2px;align-items:center';
+      for(let k=0;k<D;k++){const x=el('div','vlc');x.style.cssText='width:14px;height:14px;background:'+VC[0];col.append(x)}
+      for(let k=0;k<c;k++){const x=el('div','vlc');x.style.cssText='width:14px;height:14px;background:'+VC[4];col.append(x)}
+      col.append(el('small','',`step ${i+1}`));col.lastChild.style.cssText='font-size:11px;color:#999;order:-1';wrap.append(col)});
+    info.innerHTML=`New prompt prefilled in <b>${steps}</b> step${steps>1?'s':''} · the 3 decoders still get a token <b>every step</b> (one step = ${bud} tokens of work)<br><span style="color:#888">without chunking: one step of 20+3 = 23 tokens, the decoders wait for it</span>`};
+  inp.oninput=draw;draw();r._f={play:null,final:()=>{}}};
+
+/* 7 architecture */
+FIGS.vlarch=(r)=>{
+  const row=el('div','flex mid');row.style.cssText='gap:6px;flex-wrap:nowrap';
+  const b=(cls,t,s)=>el('div','vlbx '+cls,`${t}<small>${s}</small>`);
+  const eng=el('div','vlbx');eng.style.cssText='background:#fff;border-color:#e8789f;padding:10px 10px;border-radius:12px;border:2.5px solid #e8789f';
+  eng.append(el('div','','EngineCore<small>one busy loop: step()</small>'));
+  const inner=el('div','flex mid');inner.style.cssText='margin-top:8px;gap:6px';
+  inner.append(b('sc','Scheduler','waiting / running<br>token budget'),el('span','',AH(26)),b('kv','KV cache manager','block pool<br>block tables'));
+  eng.append(inner);
+  row.append(b('in','API server','HTTP in / out<br>tokenize, detokenize'),el('span','',AH(26)),eng,el('span','',AH(26)),b('gp','Workers (GPUs)','model runner<br>PagedAttention kernel<br>CUDA graphs'));
+  r.append(row);
+  r.append(el('div','vlcap','Every step(): <b>Schedule</b> (who runs, how many tokens each) → <b>Forward</b> (GPU runs the model, samples) → <b>Postprocess</b> (append tokens, check stop, free blocks)'));
+  r._f={play:null,final:()=>{}}};
+
+/* 8 how many requests fit */
+FIGS.vlcost=(r)=>{
+  const KV=12000,PT=0.8192,MAX=2048;let L=300;
+  const sl=el('div','vlsl'),inp=el('input');inp.type='range';inp.min=64;inp.max=2048;inp.step=16;inp.value=L;const lab=el('b','','');sl.append('Average real length (prompt + output)',inp,lab);
+  const bars=el('div','');bars.style.cssText='height:92px';
+  const info=el('div','vlnote');info.style.height='28px';
+  r.append(sl,bars,info);
+  const row=(t,n,max,bg)=>{const d=el('div','');d.style.cssText='display:flex;align-items:center;gap:10px;margin:8px auto;width:min(780px,96%)';const l=el('div','',t);l.style.cssText='width:210px;text-align:right;font-size:14px;color:#555';const b=el('div','');b.style.cssText=`height:30px;background:${bg};border:2px solid #4a4a58;border-radius:6px;width:${Math.max(4,n/max*360)}px;transition:width .15s`;const v=el('b','',String(n));v.style.cssText='font-size:18px;color:#c0602a';d.append(l,b,v);return d};
+  const draw=()=>{L=+inp.value;lab.textContent=L+' tokens';bars.innerHTML='';
+    const old=Math.floor(KV/(MAX*PT)),per=Math.ceil(L/16)*16*PT,neu=Math.floor(KV/per);
+    const mx=Math.max(neu,old,1);bars.append(row('Reserve 2048 tokens each',old,Math.max(mx,40),'#f7b9b9'),row('vLLM: blocks of 16, on demand',neu,Math.max(mx,40),ROLE.x));
+    info.innerHTML=`Concurrent requests that fit in 12 GB of KV Cache (0.8 MB per token) · <b>${(neu/old).toFixed(1)}×</b> more`};
+  inp.oninput=draw;draw();r._f={play:null,final:()=>{}}};
+
+
+
+/* boot */
+document.querySelectorAll('.fig[data-fig]').forEach(r=>{const f=FIGS[r.dataset.fig];if(f)f(r)});
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&!e.target._seen&&!window.FROZEN){e.target._seen=1;e.target._f&&e.target._f.play&&e.target._f.play()}}),{threshold:.45});
+document.querySelectorAll('.fig').forEach(r=>io.observe(r));
+window.renderFinal=()=>{window.FROZEN=true;document.body.classList.add('static');document.querySelectorAll('.fig').forEach(r=>r._f&&r._f.final&&r._f.final())};
+
+/* figure-only mode: ...html#only-<id> shows just that figure (used for per-figure embeds in notes).
+   Every embedded figure is zoomed so its CONTENT is the same width (FIGW px, capped by the pane), then reports its height to the note. */
+(function(){const m=location.hash.match(/^#only-(\w+)/);if(!m)return;const id=m[1];
+  document.body.classList.add('only');
+  document.querySelectorAll('.wrap > *').forEach(e=>{if(e.id!=='fig-'+id)e.style.display='none'});
+  const f=document.getElementById('fig-'+id);if(f){f.style.margin='0 auto';f.style.padding='8px 0'}
+  document.querySelector('.wrap').style.padding='0';
+  const FIGW=760,ZMIN=.6,ZMAX=1.8;
+  const fit=()=>{if(!f)return;f.style.zoom=1;
+    const fw=f.clientWidth;let l=1e9,r=-1e9;
+    f.querySelectorAll('*').forEach(e=>{if(e.closest('.cap,.vlcap,.ctrl'))return;
+      const b=e.getBoundingClientRect();if(!b.width||!b.height||b.width>=fw-2)return;l=Math.min(l,b.left);r=Math.max(r,b.right)});
+    let nat=r-l;if(f.scrollWidth>fw)nat=Math.max(nat,f.scrollWidth);if(!(nat>0))return;
+    const z=Math.max(ZMIN,Math.min(ZMAX,FIGW/nat,(innerWidth-24)/nat));
+    f.style.zoom=z;window.__fig={nat:Math.round(nat),zoom:+z.toFixed(2)};
+    parent.postMessage({figH:Math.ceil(f.getBoundingClientRect().height)+16,fig:id},'*')};
+  setTimeout(()=>{f&&f._f&&f._f.play&&f._f.play();setTimeout(fit,150)},250);
+  addEventListener('resize',fit)})();
+
+</script></body></html>

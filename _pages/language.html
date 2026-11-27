@@ -1,0 +1,34 @@
+---
+layout: null
+title: <i class="fa-solid fa-language" title="EN / 中文" aria-label="EN / 中文"></i>
+permalink: /language/
+nav: true
+nav_order: 9
+sitemap: false
+---
+
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="robots" content="noindex" />
+<title>EN / 中文</title>
+<script>
+  // Swaps the referring page to its other-language URL: /x/ <-> /zh/x/, plus the essay pairs
+  // from _data/published_essays.yml. Pages with no translation fall back to that language's home.
+  var pages = {
+    {%- for p in site.pages -%}{%- if p.url contains '.' -%}{%- continue -%}{%- endif -%}{{ p.url | jsonify }}: 1,{%- endfor -%}
+    {%- for p in site.projects -%}{{ p.url | jsonify }}: 1,{%- endfor -%}
+  };
+  var pairs = {
+    {%- for e in site.data.published_essays.essays -%}{%- if e.live -%}{{ e.zh_permalink | jsonify }}: {{ e.en_permalink | jsonify }}, {{ e.en_permalink | jsonify }}: {{ e.zh_permalink | jsonify }},{%- endif -%}{%- endfor -%}
+  };
+  var from = "/";
+  try {
+    var r = new URL(document.referrer);
+    if (r.origin === location.origin) from = r.pathname;
+  } catch (e) {}
+  var toZh = from.indexOf("/zh/") !== 0;
+  var to = pairs[from] || (toZh ? "/zh" + from : from.slice(3) || "/");
+  if (!pages[to]) to = toZh ? "/zh/" : "/";
+  location.replace(to + (document.referrer ? new URL(document.referrer).hash : ""));
+</script>
+<noscript><a href="/">English</a> · <a href="/zh/">中文</a></noscript>

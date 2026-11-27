@@ -1,0 +1,439 @@
+---
+# Only the main Sass file needs front matter (the dashes are enough)
+---
+@charset "utf-8";
+
+@use "sass:math";
+@use "sass:string";
+
+@use "variables" with (
+  $max-content-width: {{ site.max_width | default:  "930px" }}
+);
+
+@use "themes";
+@use "layout";
+
+@use "typography";
+@use "navbar";
+@use "footer";
+@use "blog";
+@use "publications";
+@use "components";
+@use "utilities";
+
+@use "tabs";
+@use "teachings";
+@use "typograms";
+
+// Site palette: ink blue on warm paper, sky blue on slate in dark mode.
+// Everything above is copied from al_folio_core 1.0.15; keep it in sync when the gem changes.
+:root {
+  --global-bg-color: #fbfaf7;
+  --global-text-color: #1f2328;
+  --global-text-color-light: #5f6670;
+  --global-theme-color: #1d4e89;
+  --global-hover-color: #1d4e89;
+  --global-code-bg-color: rgba(29, 78, 137, 0.06);
+  --global-card-bg-color: #ffffff;
+  --global-divider-color: rgba(31, 35, 40, 0.1);
+  --global-footer-bg-color: #1f2328;
+}
+
+.navbar {
+  opacity: 1;
+  border-bottom: 0;
+}
+
+.navbar.navbar-light {
+  .navbar-nav .nav-item .nav-link {
+    color: var(--global-text-color-light);
+    font-weight: 400;
+    transition: color 0.15s;
+  }
+
+  .navbar-nav .nav-item .nav-link:hover,
+  .navbar-nav .nav-item.active > .nav-link {
+    color: var(--global-text-color);
+  }
+
+  .navbar-nav .nav-item.active > .nav-link {
+    font-weight: 600;
+  }
+
+  .navbar-nav {
+    align-items: center;
+  }
+
+  .navbar-nav .toggle-container {
+    display: flex;
+    align-items: center;
+  }
+
+  #light-toggle {
+    transform: none;
+  }
+
+  // Icons read search, theme, language; the language page is in the page loop, so it is moved last.
+  .nav-item:has(> a[href$="/language/"]) {
+    order: 1;
+  }
+
+  // Search, theme and language share one icon box so they line up.
+  .nav-item:has(> #search-toggle) {
+    position: relative;
+    margin-left: 0.5rem;
+    padding-left: 0.5rem;
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      height: 1.1rem;
+      transform: translateY(-50%);
+      border-left: 1px solid var(--global-divider-color);
+    }
+  }
+
+  .nav-item > a[href$="/language/"],
+  #search-toggle .nav-link,
+  #light-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+    padding: 0 0.5rem;
+    color: var(--global-text-color-light);
+    line-height: 1;
+    transition: color 0.15s;
+  }
+
+  .nav-item > a[href$="/language/"]:hover,
+  #search-toggle:hover .nav-link,
+  #light-toggle:hover {
+    color: var(--global-text-color);
+  }
+
+  .nav-item > a[href$="/language/"] i,
+  #search-toggle i,
+  #light-toggle i {
+    font-size: 1rem;
+    width: 1.15em;
+    text-align: center;
+    vertical-align: 0;
+    color: inherit;
+  }
+
+  #search-toggle .nav-link {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+  }
+}
+
+.navbar .dropdown-menu {
+  min-width: 0;
+  padding: 0.35rem 0;
+  margin-top: 0.25rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  text-align: left;
+
+  .dropdown-item {
+    padding: 0.35rem 1.1rem;
+    font-size: 0.9rem;
+    text-align: left;
+  }
+
+  .dropdown-item.active,
+  .dropdown-item[aria-current="page"] {
+    color: var(--global-theme-color);
+    background-color: transparent;
+    font-weight: 600;
+  }
+
+  .dropdown-item:hover {
+    color: var(--global-theme-color);
+    background-color: var(--global-code-bg-color);
+  }
+}
+
+#progress,
+footer {
+  display: none;
+}
+
+body {
+  padding-bottom: 3rem;
+}
+
+.essay-frame {
+  position: fixed;
+  top: 57px;
+  left: 0;
+  width: 100%;
+  height: calc(100vh - 57px);
+  border: 0;
+  background: var(--global-bg-color);
+  z-index: 1;
+}
+
+body:has(.essay-frame) footer {
+  display: none;
+}
+
+.essay-list {
+  border-top: 1px solid var(--global-divider-color);
+
+  .essay-item {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--global-divider-color);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .essay-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .essay-cover {
+    flex: none;
+    width: 200px;
+    aspect-ratio: 1.618 / 1;
+    object-fit: contain;
+    padding: 0.4rem;
+    border: 1px solid var(--global-divider-color);
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  @media (max-width: 576px) {
+    .essay-item {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .essay-cover {
+      width: 100%;
+    }
+  }
+
+  .essay-date {
+    font-size: 0.82rem;
+    color: var(--global-text-color-light);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .essay-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--global-text-color);
+  }
+
+  .essay-desc {
+    font-size: 0.92rem;
+    color: var(--global-text-color-light);
+  }
+
+  .essay-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+  }
+
+  .essay-tag {
+    color: var(--global-text-color-light);
+    font-size: 0.8rem;
+  }
+
+  .essay-item:hover .essay-title {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+article img,
+.post img {
+  max-width: 100%;
+  height: auto;
+}
+
+.post-header .post-title {
+  font-size: 2rem;
+  margin-bottom: 0.25rem;
+}
+
+.post-header .desc,
+.post-header .post-description {
+  font-size: 0.95rem;
+}
+
+.post h2,
+.publications h2,
+.projects h2.category {
+  font-size: 1.35rem;
+  margin-top: 1.75rem;
+}
+
+.projects h2.category {
+  text-align: left;
+  color: var(--global-text-color);
+  border-bottom: 1px solid var(--global-divider-color);
+  padding-bottom: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.projects a:has(> h2.category) {
+  text-decoration: none;
+}
+
+.projects .card .card-title {
+  font-size: 1.1rem;
+  margin-top: 0;
+}
+
+.projects .card .card-text {
+  font-size: 0.85rem;
+}
+
+.post h2,
+.selected-work {
+  clear: both;
+}
+
+// The about layout hard-codes a lowercase "news" heading.
+.post h2:has(> a[href$="/news/"]) {
+  text-transform: capitalize;
+}
+
+.selected-work {
+  margin: 0.5rem 0 1.5rem;
+  border-top: 1px solid var(--global-divider-color);
+
+  .work-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--global-divider-color);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .work-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .work-title {
+    font-weight: 600;
+    color: var(--global-text-color);
+    transition: color 0.15s;
+  }
+
+  .work-desc {
+    font-size: 0.9rem;
+    color: var(--global-text-color-light);
+  }
+
+  .work-meta {
+    flex-shrink: 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    text-align: right;
+    color: var(--global-text-color-light);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .work-item:hover .work-title {
+    color: var(--global-theme-color);
+  }
+
+  @media (max-width: 576px) {
+    .work-item {
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .work-meta {
+      text-align: left;
+    }
+  }
+}
+
+.profile {
+  max-width: 210px;
+
+  img {
+    max-width: 210px;
+  }
+}
+
+.news th,
+.news td,
+.publications ol.bibliography li {
+  font-size: 0.92rem;
+}
+
+.profile .more-info {
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--global-text-color-light);
+  line-height: 1.6;
+}
+
+.social .contact-icons {
+  font-size: 1.3rem;
+
+  a {
+    margin: 0 0.4rem;
+  }
+
+  a i::before {
+    color: var(--global-text-color-light);
+  }
+
+  // Font Awesome's fa-zhihu is a thin outline of the characters; swap in the official mark.
+  a i.fa-zhihu::before {
+    content: "";
+    display: inline-block;
+    width: 0.875em;
+    height: 0.875em;
+    vertical-align: -0.1em;
+    background-color: var(--global-text-color-light);
+    mask: url("../img/zhihu.svg") center / contain no-repeat;
+  }
+
+  a:hover i.fa-zhihu::before {
+    background-color: var(--global-theme-color);
+  }
+}
+
+.publications ol.bibliography li .abbr abbr {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+html[data-theme="dark"] {
+  --global-bg-color: #14181f;
+  --global-text-color: #d9dee5;
+  --global-text-color-light: #9aa3ae;
+  --global-theme-color: #7ab3ef;
+  --global-hover-color: #7ab3ef;
+  --global-hover-text-color: #14181f;
+  --global-code-bg-color: rgba(122, 179, 239, 0.08);
+  --global-card-bg-color: #1b212a;
+  --global-divider-color: #2b333d;
+  --global-footer-bg-color: #d9dee5;
+}

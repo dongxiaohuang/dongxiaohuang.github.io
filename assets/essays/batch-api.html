@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>图解 Batch API</title><style>*{box-sizing:border-box}
+body{margin:0;font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:#222;font-size:18px;line-height:1.5;background:#fff}
+.wrap{max-width:940px;margin:0 auto;padding:0 24px 80px}
+header.site{padding:28px 0 18px;border-bottom:1px solid #e6e6e6}
+header .t{font-size:30px;font-weight:300;color:#333}header .s{font-size:16px;color:#666}
+h1{font-size:28px;font-weight:700;margin:64px 0 22px;color:#222}
+h2{font-size:24px;font-weight:700;margin:58px 0 18px;color:#222}
+p{margin:0 0 17px}
+.meta{font-size:14px;color:#666;margin:7px 0}
+.upd{margin:30px 0 30px;padding-left:14px;border-left:4px solid #ddd;font-size:16px;color:#444}
+a{color:#4183c4;text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+code{font-family:"Bitstream Vera Sans Mono",Courier,monospace;color:#c7254e;background:#f9f2f4;padding:2px 4px;border-radius:4px;font-size:.88em}
+ul,ol{margin:0 0 17px;padding-left:26px}li{margin:6px 0}
+table{border-collapse:collapse;margin:22px auto;font-size:15px}th,td{border:1px solid #ddd;padding:7px 12px;text-align:left}th{background:#f7f7f7}
+.fig{margin:30px auto 4px;padding:14px 0 4px;text-align:center;position:relative}
+.fig.shot img{max-width:100%;border:1px solid #e3e3e3;border-radius:6px}
+.cap{font-size:14px;color:#999;text-align:center;margin:8px auto 30px;max-width:780px;line-height:1.45}
+.ctrl{font-size:13px;color:#aaa;margin-top:10px}
+/* shared figure parts */
+.flex{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.mid{align-items:center}
+.col{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lab,.lab2{font-size:13px;color:#888;margin:6px 0}
+.vec{display:inline-flex;border:1px solid #666;vertical-align:middle}
+.vec i{display:block;border-right:1px solid #666}.vec i:last-child{border-right:0}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:38px;padding:0 10px;border:2px solid #6a6a6a;border-radius:8px;margin:3px;font-size:17px;background:#fff;transition:background .3s}
+.tok{font-weight:700;font-size:18px;margin-top:4px}.tok.x{color:#6cc04a}
+.lx{color:#6cc04a}.big{font-size:20px}
+.tag.price{font-size:13px;background:#f4f4f4;border-radius:10px;padding:2px 10px;color:#555}
+.blackbox{background:#3a3a46;color:#fff;border-radius:14px;padding:22px 26px;font-size:17px;line-height:1.3}.blackbox.small{padding:12px 16px;font-size:14px}.blackbox small{color:#bbb}
+.ar{display:block;margin:0 auto}
+.bx{border:2.5px solid #4a4a58;border-radius:12px;padding:9px 20px;font-size:14px;color:#444;font-weight:600;line-height:1.3;min-width:150px}
+.bx small{font-weight:400;color:#888}.bx.sa{background:#fcefdf}.bx.ff{background:#e6eefb}.bx.wide{width:100%}
+.dec{border:2.5px solid #eba7c6;border-radius:16px;padding:16px 16px 8px;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:#fff}
+.dtag{position:absolute;top:-10px;left:14px;background:#fff;padding:0 6px;font-size:11px;letter-spacing:.6px;color:#e393b8}
+.dec.stack{gap:8px}.mini{border:2px solid #eba7c6;border-radius:10px;padding:6px 18px;font-size:13px;color:#777;background:#fdf1f6}
+/* paths */
+.paths{display:flex;flex-direction:column;align-items:center;gap:2px;max-width:560px;margin:0 auto}
+.prow{display:flex;gap:16px;justify-content:center;width:100%}.prow>div{flex:1;display:flex;flex-direction:column;align-items:center}
+.pc{align-items:center}
+/* qkv + attention grids */
+.qgrid,.agrid{display:grid;grid-template-columns:130px repeat(3,150px) 90px;gap:10px 8px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.rl{color:#666;font-size:15px;font-weight:600;text-align:right;padding-right:10px}
+.cc{display:flex;align-items:center;justify-content:center;gap:4px;min-height:34px;font-size:14px}
+.cc.ghost{color:#bbb;font-size:12px}.num{font-weight:700;font-size:16px;color:#555}.sm{font-size:12px;color:#888}
+.wm{display:grid;grid-template-columns:repeat(3,13px);gap:0;border:1px solid #bbb}.wm i{display:block;width:13px;height:13px;border:1px solid}
+.wcell{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.wb{height:6px;background:#dcbef2;border-radius:3px;margin-left:4px}
+.hid{opacity:0;visibility:hidden}
+.agrid>*{transition:opacity .6s}
+.anote{margin-top:16px;font-size:14px;color:#c0602a;font-weight:600;border:2px dashed #f0a04b;border-radius:10px;display:inline-block;padding:6px 14px;transition:opacity .6s}
+.agrid.hl .rl{}
+/* decoding */
+.drows{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+.drow{display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .7s;flex-wrap:nowrap}
+.dlab{width:84px;font-size:14px;font-weight:700;color:#555;text-align:right;line-height:1.25}.dlab small{font-weight:400;color:#999}
+.dtoks{display:flex;gap:2px;min-width:340px;justify-content:flex-start}
+.dtok{display:flex;flex-direction:column;align-items:center;padding:4px 3px;border-radius:8px;border:2px solid transparent}
+.dtok .kv{display:flex;gap:3px;margin-top:2px}
+.dtok.cached{opacity:.55;border:2px dashed #bbb;background:#fafafa}.dtok:not(.cached){border-color:#f5d28a;background:#fffaf0}
+.ctag{font-size:11px;color:#999;margin-top:2px}.dtok:not(.cached) .ctag{color:#d08a1a}
+.mini2{padding:16px 12px 10px;font-size:13px;color:#777;min-width:96px;background:#fdf1f6}.mini2 .dtag{position:absolute}
+.cnt{font-size:13px;color:#888;min-width:140px;text-align:left}.cnt b{font-size:18px;color:#c0602a}
+.pulse .dtok:not(.cached){animation:pl 1s ease}@keyframes pl{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.drow{transition:opacity .7s}.tot{margin-top:18px;font-size:16px;font-weight:600;color:#555;transition:opacity .6s}.tot b{font-size:24px;color:#c0602a}
+/* timeline */
+.tl{max-width:760px;margin:0 auto;text-align:left}
+.lane{display:flex;align-items:center;gap:14px;margin:12px 0;transition:opacity .5s}
+.ln{width:70px;font-weight:700;color:#555;text-align:right;font-size:15px}
+.bar{border:2px solid #4a4a58;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.3;text-align:center;transition:opacity .5s}.bar small{color:#777;font-size:12px}
+.bar.pf{background:#e6eefb;width:300px}.bar.dc{background:#fcefdf;width:150px}
+.seq{display:flex;gap:10px}.axis{text-align:right;color:#aaa;font-size:13px;border-top:2px solid #ccc;margin-top:14px;padding-top:4px}
+/* memory */
+.mem{max-width:720px;margin:0 auto}.memlab{font-size:13px;color:#888;margin-bottom:4px;text-align:left}
+.membar{display:flex;height:48px;border:2.5px solid #4a4a58;border-radius:10px;overflow:hidden;background:#fafafa}
+.seg{display:flex;align-items:center;justify-content:center;font-size:13px;white-space:nowrap;overflow:hidden;transition:width .2s}.seg.w{background:#e6e6ee}.seg.kv{background:linear-gradient(90deg,#fcc990 50%,#a9cbf3 50%);color:#333}.seg.kv.over{background:#f7b9b9}
+.meminfo{margin:10px 0;font-size:15px;color:#555;min-height:22px}
+.sls{display:flex;gap:30px;justify-content:center;flex-wrap:wrap}.sl{font-size:14px;color:#555}.sl input{vertical-align:middle;margin-left:8px;width:170px}
+/* compress */
+.crow{display:flex;align-items:flex-end;gap:14px;margin:18px auto;max-width:900px;text-align:left;transition:opacity .5s}
+.cl{width:150px;font-size:14px;line-height:1.3;flex:none}.cl small{color:#888}
+.blocks{display:flex;gap:2px;align-items:flex-end;flex-wrap:nowrap}
+.kvb{display:flex;flex-direction:column;border:1px solid #666;border-radius:2px;overflow:hidden}.kvb i{flex:1;display:block}
+/* prefix */
+.prow2{display:flex;justify-content:center;flex-wrap:wrap;margin:2px 0}.pinfo{margin:14px 0 4px;font-size:15px;color:#555}.pinfo b{font-size:20px;color:#c0602a}
+/* bars */
+.mb{max-width:720px;margin:16px auto;text-align:left}.brow{display:flex;align-items:center;margin:4px 0;font-size:13px}.bl{width:118px;color:#777;flex:none}
+.brow i{display:block;height:18px;border:1px solid #888;border-radius:3px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}.brow em{font-style:normal;margin-left:8px;color:#555}
+@media(max-width:760px){.qgrid,.agrid{grid-template-columns:90px repeat(3,100px) 60px;font-size:12px}.drow{flex-wrap:wrap}}
+
+/* unified price chart */
+.pgrid{display:grid;grid-template-columns:214px 80px 80px 80px 1fr 1.15fr;gap:7px 10px;align-items:center;max-width:900px;margin:0 auto;text-align:left;font-size:14px}
+.ph{font-size:12px;color:#777;font-weight:600;line-height:1.25}.ph.wide{padding-left:2px}
+.dot{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a;margin-right:5px;vertical-align:-1px}
+.pn{color:#333;font-weight:600}.pn small{display:block;color:#999;font-size:11px;font-weight:400;line-height:1.1}
+.pcell{border:1px solid #6a6a6a;border-radius:6px;padding:3px 0;text-align:center;font-size:13px;color:#333}
+.pbar{display:flex;align-items:center;gap:8px}.pbar i{display:block;height:16px;border:1px solid #6a6a6a;border-radius:3px;width:0}.pbar b{font-size:13px;color:#555}
+.sep{margin-top:6px}
+.pn{display:flex;align-items:center;gap:9px}.vi{width:26px;height:26px;border-radius:6px;flex:none}
+.static .ctrl{display:none}
+.pgrid{padding:0 6px}
+
+.vcell{position:relative;display:inline-flex;vertical-align:middle}
+.vl{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:7px;font-size:14px;white-space:nowrap}
+.erow{display:flex;justify-content:center;gap:90px}.ecol{display:flex;flex-direction:column;align-items:center;gap:8px;width:120px}
+.static .fig{padding:28px 44px 28px}
+
+.nowrap{flex-wrap:nowrap}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+#fig-bill .blackbox{padding:18px 18px;font-size:16px;min-width:150px}
+#fig-decode0 .chip,#fig-decode1 .chip{min-width:0;padding:0 7px;height:32px;font-size:15px;margin:2px}
+.dtoks{min-width:350px}.dlab{width:104px}.cnt{min-width:110px}
+.bar.dc{width:205px}
+.cl{width:215px}
+
+/* prefill figure */
+.pfig{display:grid;grid-template-columns:370px 104px 300px;gap:0 8px;align-items:center;max-width:820px;margin:0 auto;text-align:center}
+.pfl{display:flex;flex-direction:column;align-items:center;gap:6px}
+.pfbadge{align-self:flex-start;font-size:12px;letter-spacing:1px;font-weight:700;color:#fff;background:#6cc04a;border-radius:10px;padding:2px 12px;transition:background .3s}.pfbadge.d{background:#e8789f}
+.pfout{display:flex;gap:6px;min-height:44px;align-items:center}
+.pfdec{padding:20px 18px 12px;font-size:13px;color:#555;width:100%;transition:all .4s}.pfdec small{color:#999}.pfdec.hot{background:#fff6fa;box-shadow:0 0 0 4px #f7c9dc}
+.pfin{display:flex;gap:6px;justify-content:center;min-height:66px}
+.pfcol{display:flex;flex-direction:column;align-items:center;gap:2px;transition:opacity .4s}.pfcol.hot .chip{box-shadow:0 0 0 3px #f5d28a}
+.hide{opacity:0;visibility:hidden}
+.pfin .pfcol.hide{display:none}.pfout .chip{transition:opacity .4s}
+.pfmid{font-size:13px;color:#c0602a;font-weight:600;min-height:20px}
+.pfr{display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:left}
+.pfcache{border:2.5px solid #4a4a58;border-radius:12px;padding:10px;background:#fff}.pfcache .t{font-size:11px;color:#888;letter-spacing:.8px;margin-bottom:6px}
+.slots{display:flex;gap:5px}.slot{border:1.5px dashed #ccc;border-radius:8px;padding:4px;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:#bbb;transition:all .4s}
+.slot .kvv{opacity:0;display:flex;gap:3px;transition:opacity .4s}.slot.full{border:1.5px solid #6a6a6a;color:#555;background:#fafafa}.slot.full .kvv{opacity:1}
+.slot.hot{box-shadow:0 0 0 3px #f5d28a}.slot.read{box-shadow:0 0 0 3px #a9cbf3}
+.pfmask{border:1.5px solid #ddd;border-radius:10px;padding:8px 10px;font-size:11px;color:#888;line-height:1.35;transition:opacity .4s;height:208px;overflow:hidden}
+.pfmask table{border-collapse:separate;border-spacing:3px;margin-top:5px}.pfmask td{width:34px;height:22px;text-align:center;font-size:11px;border-radius:4px}
+.pfmask td.l{width:auto;color:#555;background:none;text-align:right;padding-right:4px;font-size:11px}.pfmask td.y{background:#a9cbf3;color:#335}.pfmask td.n{background:#eee;color:#bbb}
+.pfcap{grid-column:1/4;margin-top:16px;font-size:14px;color:#555;height:44px}
+
+.kvg{display:inline-flex;flex-direction:column;align-items:center}.kvg small{font-size:10px;font-weight:700;line-height:1.1;margin-top:1px}
+.lg{display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:11px;color:#666;letter-spacing:0;text-transform:none}
+.lg i{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a}
+.legend{margin:10px 0 0;font-size:12px;color:#666;text-align:center}
+.pfcache .t{display:flex;align-items:center}
+.slot .kvv{gap:4px}
+
+.ctrl a.pb{display:inline-block;min-width:84px;text-align:center}
+.pfig{min-height:330px}
+
+/* z -> next word figure */
+.lrow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:nowrap}
+.lcol{display:flex;flex-direction:column;align-items:center;gap:6px}.lcap{font-size:11px;color:#888;line-height:1.25;max-width:150px}
+.lyr{padding:18px 14px 10px;gap:2px}.lyr .bx{min-width:150px;font-size:12px;padding:7px 12px}
+.lmh{min-width:120px;font-size:12px;padding:8px 12px}
+.lturn{color:#bbb;font-size:20px;margin:6px 0}
+.ltbl{display:grid;grid-template-columns:48px 36px 64px 150px;gap:3px 6px;align-items:center;text-align:left;font-size:12px}
+.lh{font-size:10px;color:#999;font-weight:600}.lw{text-align:right;color:#333}.ll{color:#888;text-align:right}.la{color:#c0602a;font-size:11px;font-weight:600}
+.lb{display:flex;align-items:center;gap:6px}.lb i{display:block;height:12px;border:1px solid #888;border-radius:2px}.lb em{font-style:normal;color:#555;font-size:11px}
+
+/* animated q/k/v figure */
+.qgrid2{display:grid;grid-template-columns:96px repeat(3,128px) 92px 170px;gap:10px 14px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.qgrid2>*{transition:opacity .5s}
+.qnote{font-size:12px;font-weight:600;text-align:left;color:#555}
+.qnote[data-role=q]{color:#b0505a}.qnote[data-role=k],.qnote[data-role=v]{color:#2f8f4e}
+.qgrid2.final .cc[data-role=q],.qgrid2.final .rl[data-role=q]{opacity:.35}
+.qgrid2.final .cc[data-role=k],.qgrid2.final .cc[data-role=v]{outline:2px dashed #7fbf8f;outline-offset:2px;border-radius:4px}
+.qcap{margin-top:16px;font-size:14px;color:#555;height:44px}
+
+math{font-size:1.08em}math[display=block]{margin:12px 0}
+
+table td:nth-child(2),table th:nth-child(2){white-space:nowrap}
+
+.callout{margin:0 0 17px}
+.callout .ct{font-weight:700;color:#222;margin-bottom:6px}.callout p{margin:0 0 17px}.callout ul{margin:0 0 17px}
+
+/* decode figures: one shared column grid so every column lines up across rows */
+#fig-decode0 .drow,#fig-decode1 .drow{display:grid;grid-template-columns:96px 390px 30px 96px 30px 72px 88px;column-gap:3px;justify-content:center;align-items:center}
+#fig-decode0 .dtoks,#fig-decode1 .dtoks{display:grid;grid-template-columns:repeat(5,78px);gap:0;min-width:0;justify-content:start}
+#fig-decode0 .dtok,#fig-decode1 .dtok{width:78px;box-sizing:border-box;padding:4px 2px}
+#fig-decode0 .dlab,#fig-decode1 .dlab{width:auto;padding-right:8px;text-align:right}
+#fig-decode0 .mini2,#fig-decode1 .mini2{min-width:0;width:96px;box-sizing:border-box;padding:16px 4px 10px}
+#fig-decode0 .cnt,#fig-decode1 .cnt{min-width:0;width:88px}
+#fig-decode0 .span,#fig-decode1 .span{display:block}
+.dout{display:flex;justify-content:center}
+.static .fig{padding:28px 32px 28px}
+
+/* small DECODER tag so it no longer hides the top border of the box */
+.mini2 .dtag{font-size:10px;letter-spacing:.4px;left:12px;top:-8px;padding:0 4px;line-height:14px}
+.mini2{padding-top:18px}
+
+/* per-token price figure */
+.bill{display:flex;align-items:flex-start;justify-content:center;gap:12px}
+.bgrp{display:flex;flex-direction:column;align-items:center}
+.blab{font-size:12px;color:#888;margin-bottom:8px;height:16px}
+.brow2{display:flex;align-items:flex-start;gap:6px}
+.btc{display:flex;flex-direction:column;align-items:center;gap:6px}
+.bbar{width:40px;align-self:center;border:1px solid #6a6a6a;border-radius:4px;display:flex;align-items:flex-start;justify-content:center;font-size:11px;font-weight:700;color:#444;padding-top:1px;box-sizing:border-box}
+.bcap{margin-top:12px;font-size:12px;color:#555;background:#f4f4f4;border-radius:10px;padding:2px 10px}
+.bmid{display:flex;align-items:center;gap:6px;margin-top:20px;align-self:flex-start}
+.bmid .blackbox{padding:14px 16px;font-size:14px;min-width:150px;margin-top:0}
+.bmid .ar{margin-top:0}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+
+.pxcap{margin:12px auto 0;min-height:44px;max-width:700px;font-size:15px;color:#555;line-height:1.45}
+.bt-w{width:720px;max-width:100%;margin:0 auto;text-align:left}
+.bt-leg{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;font-size:13px;color:#555;margin-bottom:12px}
+.bt-sw{display:inline-flex;align-items:center;gap:6px}.bt-sw i{display:inline-block;width:14px;height:14px;border:1px solid #9aa3ad;border-radius:3px}
+.bt-pg{display:grid;grid-template-columns:150px 215px 215px 80px;gap:8px 8px;align-items:center}
+.bt-h{font-size:12px;color:#777;font-weight:600;line-height:1.25}.bt-n{font-weight:600;font-size:14px;color:#333}
+.bt-bars{display:flex;flex-direction:column;gap:3px}.bt-br{display:flex;align-items:center;gap:6px;font-size:12px;color:#444;height:16px}
+.bt-br i{display:block;height:14px;border:1px solid #9aa3ad;border-radius:3px}
+.bt-x{font-weight:700;color:#3d6fb0;font-size:15px;text-align:center}
+.bt-st{display:flex;justify-content:space-between;gap:8px}
+.bt-sb{flex:1;border:1px solid #9aa3ad;border-radius:8px;padding:10px 4px;text-align:center;font-size:13px;color:#555;background:#fff;transition:background .4s;min-height:40px;display:flex;align-items:center;justify-content:center}
+.bt-sb.done{background:#e6eefb}.bt-sb.on{background:#fbe8c0;border-color:#f0b24b;font-weight:700;color:#333}
+.bt-clk{font-size:13px;color:#777;margin:10px 0 6px;text-align:center}.bt-clk b{color:#a06a00}
+.bt-pan{margin:0;background:#f6f8fa;border:1px solid #e1e5ea;border-radius:8px;padding:12px 14px;font:12px/1.5 Menlo,Consolas,monospace;color:#333;height:112px;overflow:hidden;white-space:pre;text-align:left}
+.bt-svg{display:flex;justify-content:center}
+.bt-px{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.bt-bx{border:1px solid #9aa3ad;border-radius:10px;padding:10px 12px;font-size:13px;color:#333;line-height:1.35}
+.bt-bx small{display:block;color:#666;margin-top:4px;font-size:12px}.bt-bx ol{margin:6px 0 0;padding-left:18px;font-size:12px}
+.bt-bx.bl{background:#e6eefb;width:140px;flex:none}.bt-bx.am{background:#fdf1d6;border-color:#f0b24b;width:250px;flex:none}.bt-bx.sl{background:#f1f3f5;margin:5px 0;font-size:12px}
+.bt-prov{width:170px;flex:none}.bt-ar{font-size:22px;color:#777;text-align:center;line-height:1}.bt-ar small{font-size:11px;display:block}
+.fig .chip{border:1.5px solid #9aa3ad !important}
+pre.code{background:#f6f8fa;border:1px solid #e1e5ea;border-radius:8px;padding:12px 14px;font:13px/1.5 Menlo,Consolas,monospace;overflow:auto;text-align:left}pre.code code{background:none;color:#333;padding:0}</style><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+<style>
+body{font-family:Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;font-weight:300;line-height:1.6;color:#1f2328;background:#fbfaf7}
+.wrap{max-width:930px;padding:0 15px 80px}
+h1{font-size:32px;font-weight:300;line-height:1.2;margin:48px 0 20px;color:#1f2328}
+h2{font-size:21.6px;font-weight:400;line-height:1.3;margin:44px 0 12px;color:#1f2328}
+h3{font-size:17.6px;font-weight:500;line-height:1.4;margin:28px 0 8px;color:#1f2328}
+p,ul,ol{margin-bottom:16px}
+b,strong{font-weight:500}
+a{color:#1d4e89}
+table{font-size:14.4px}
+.cap{font-size:13.6px;color:#5f6670}
+.dtag{background:#fbfaf7}
+</style>
+</head>
+<body><div class="wrap">
+<h1>图解 Batch API</h1>
+<div class="callout"><div class="ct">TLDR</div><p>批处理（Batch API）是把请求一次交给服务商、不等结果，换 50% 的折扣；便宜不是因为模型算得更快，而是因为你同意让服务商挑时间算。</p><ul><li><b>机制</b>：上传一个 JSONL（JSON Lines，每行一个 JSON）文件，创建批次，隔一会儿查状态，完成后下载结果。OpenAI、Anthropic、Gemini 的官方文档都写明按标准价的 <b>50%</b> 计费（2026-11-26 读取）。</li><li><b>代价</b>：延迟上限 24 小时（Gemini 48 小时未完成算过期）；单批上限 OpenAI 5 万请求 / 200 MB，Anthropic 10 万请求 / 256 MB。</li><li><b>为什么便宜</b>（原理推导）：GPU（图形处理器）无论有没有人用都在烧钱，请求量一天里又忽高忽低。批处理把时间的选择权交给服务商，它把活塞进空闲时段。Gemini 文档直接写了“利用机会性的非高峰算力”，DeepSeek 则把同一件事做成分时定价：非高峰价是高峰价的一半。</li><li><b>一笔账</b>：100 万个请求（每个 2,000 token 输入、500 token 输出），Claude Sonnet 5.5 标准价约 $9,000，批处理约 $4,500。</li><li><b>LiteLLM</b>：用 OpenAI 格式的 <code>files</code> + <code>batches</code> 接口，同一套代码可以把批次发给 OpenAI、Azure、Vertex、Bedrock、Mistral、vLLM、xAI；它不让批处理更便宜，价格由各家服务商决定。</li></ul></div>
+<p>打开 OpenAI、Anthropic、Gemini 的价格页，都能看到同一个选项：<b>Batch，半价</b>。条件是你不要立刻拿结果，最多等 24 小时。同样的模型、同样的输出，凭什么半价？这篇文章先看各家怎么用、卖多少钱，再解释为什么便宜，最后讲 LiteLLM 怎么把它们接成一套代码。</p>
+<p>背景知识：推理时 GPU 要反复读取模型权重，多个请求一起算最划算，见<i>illustrate of vLLM</i>；缓存命中便宜是另一个机制，见<i>illustrate of KV Cache</i>和<i>illustrate of Prefix Caching （前缀缓存）</i>。这篇讲的是第三种省钱方式：用时间换钱。</p>
+<h2>三家主流 API 都是半价，换来最长 24 小时的等待</h2>
+<p>让我们先从外部看：对调用者来说，批处理是一个“请求文件进、结果文件出”的接口，中间没有流式输出，也不保证什么时候好。下图是几个模型的官方价格（每百万 token，2026-11-26 读取）。Claude 的批处理价来自 <a href="https://platform.claude.com/docs/en/build-with-claude/batch-processing">Anthropic 批处理文档</a>的价格表；标准价来自 2026-11-24 的官方价格页（见<i>illustrate of KV Cache</i>的附录）。DeepSeek 没有批处理接口，对应的是<a href="https://api-docs.deepseek.com/quick_start/pricing">官方定价页</a>上的非高峰价。</p>
+<div class="fig" data-fig="price" id="fig-price"></div><p class="cap">每个模型两根条：灰色是标准价，蓝色是批处理价（DeepSeek 为非高峰价）。输入和输出各用一个刻度，右边一列是蓝 ÷ 灰。5 个模型全是 0.5×。</p>
+<p>数字都一样：<b>输入、输出一起减半</b>。再看各家的规则差别：</p>
+<table><thead><tr><th>厂商</th><th>折扣</th><th>等待上限</th><th>单批上限</th><th>结果保留 / 过期</th></tr></thead><tbody><tr><td><a href="https://developers.openai.com/api/docs/guides/batch">OpenAI</a></td><td>标准价的 50%</td><td>24 小时（<code>completion_window</code> 目前只能填 <code>24h</code>）</td><td>5 万个请求，输入文件 200 MB</td><td>输出文件默认保留 30 天；到期未完成的请求被取消，已完成的照常计费</td></tr><tr><td><a href="https://platform.claude.com/docs/en/build-with-claude/batch-processing">Anthropic</a>（Message Batches）</td><td>标准价的 50%</td><td>24 小时，官方说多数 1 小时内完成</td><td>10 万个请求或 256 MB，先到者为准</td><td>结果保留 29 天；24 小时内没跑完则过期</td></tr><tr><td><a href="https://ai.google.dev/gemini-api/docs/batch-mode">Google Gemini</a></td><td>标准价的 50%</td><td>目标 24 小时，多数更快；超过 48 小时未完成算过期（<code>JOB_STATE_EXPIRED</code>）</td><td>内联请求 &lt; 20 MB；文件最大 2 GB</td><td>—</td></tr><tr><td><a href="https://aws.amazon.com/bedrock/pricing/">Amazon Bedrock</a></td><td>部分模型比按需价低 50%</td><td>本次未核实</td><td>本次未核实</td><td>—</td></tr><tr><td><a href="https://api-docs.deepseek.com/quick_start/pricing">DeepSeek</a></td><td>没有批处理接口；非高峰价是高峰价的一半（同步调用）</td><td>无</td><td>—</td><td>—</td></tr></tbody></table>
+<p>这张表背后其实是<b>三种形态</b>，都在出售同一样东西：时间上的弹性。</p>
+<ul><li><b>异步批处理</b>（OpenAI、Anthropic、Gemini Batch、Bedrock）：文件进、文件出，半价，等最长 24 小时。</li><li><b>同步低优先级</b>：<a href="https://ai.google.dev/gemini-api/docs/optimization">Gemini Flex</a> 也是半价，但仍是普通同步调用，目标延迟 1–15 分钟，流量高峰时可能被抢占（官方称 sheddable）。适合“下一步依赖上一步输出”的 Agent 链，批处理做不到这一点。</li><li><b>分时定价</b>（DeepSeek）：同步调用，高峰时段（周一至周五 UTC 01:00–04:00 和 06:00–10:00，中国法定节假日除外）收全价，其余时间半价。</li></ul>
+<p>实际要等多久？官方只给上限。Anthropic 写“多数批次在 1 小时内完成”；OpenRouter 自己的批处理测试版（不是 OpenAI 的数据，我只读到摘要）说中位数 7 分钟、90% 在 1 小时内，见<a href="https://openrouter.ai/blog/announcements/batch-api">其博客</a>。24 小时是上限，不是典型值，但<b>你无法要求它更快</b>。</p>
+<h2>一个批次只有五步：不占连接，靠 custom_id 对号取结果</h2>
+<p>五步流程在各家基本一致，下图以 OpenAI 的格式为例（LiteLLM 也沿用它）。点 Next step 一步步看。</p>
+<div class="fig" data-fig="life" id="fig-life"></div><p class="cap">五步：写文件、上传、建批次、排队、下载。只有第 4 步需要“等”，而且等的时候你不占着任何连接。</p>
+<p><b>注意两个细节。</b> 第一，输出文件里的结果<b>不保证按输入顺序</b>，必须用你自己写的 <code>custom_id</code> 对号。第二，批次里单个请求可以失败，其他的照常完成：OpenAI 会把失败的写进单独的错误文件，Anthropic 在每条结果里标明成功、报错、取消或过期。所以重试要按 <code>custom_id</code> 挑出失败的那几条重新提交，不用整批重来。</p>
+<h2>便宜的原因：GPU 的成本固定，批处理让服务商把活放进空闲时段</h2>
+<p>（以下是原理推导。厂商没有公布内部成本，官方文档只给出价格和规则。）</p>
+<div class="fig" data-fig="valley" id="fig-valley"></div><p class="cap">示意图：一天里实时请求（灰）忽高忽低，GPU 容量（红虚线）是固定的；蓝色是空出来的容量，批处理可以填进去。琥珀色竖带是 DeepSeek 官方标出的高峰时段。灰色曲线的形状是我画的示意，不是真实流量。</p>
+<p><b>第一，GPU 的成本是固定的。</b> 机器买了或租了，不管有没有请求都在花钱。成本公式里分母是“这块卡一天实际算了多少 token”，所以空转是纯浪费，填满一点，每个 token 的成本就低一点。</p>
+<p><b>第二，实时流量一天里起伏很大</b>，容量必须按高峰配。上图灰色以下是实时请求，蓝色是谷底的空档。DeepSeek 把高峰时段写进了定价页（UTC 01:00–04:00、06:00–10:00，换算成北京时间是 09:00–12:00 和 14:00–18:00，正好是上班时间），非高峰半价；这等于把“谷底更便宜”直接标在了价目表上。Gemini 文档对 Flex 的解释也是同一句话：利用“机会性的、非高峰的算力”。</p>
+<p><b>第三，批处理给了服务商挑时间的自由。</b> 实时请求要在几秒内开始吐字，不能等；批处理请求可以排队，等空档来了再算。服务商的收益是：谷底也有活干。你的成本是：不知道具体什么时候好。</p>
+<p><b>第四，批量更利于 GPU 的算力利用。</b> 解码阶段每一步都要把几十 GB 权重读一遍，多个请求一起算几乎不多花时间（原理见<i>illustrate of vLLM</i>）。批处理没有首字延迟要求，调度器可以放心把一步里的并发数堆到上限；它还可以把前缀相同的请求排在一起，复用 KV Cache。Anthropic 的文档就建议：批次可能跑过 5 分钟，所以配合 1 小时缓存时长使用，缓存命中率更高。</p>
+<p><b>第五，批处理可以被打断和重试。</b> Gemini 把批处理描述为“可被抢占（sheddable）、但有 24 小时的自动重试和排队系统”。也就是说，实时流量一来，批处理的算力可以先让出去，之后再补算。</p>
+<div class="callout"><div class="ct">为什么各家都是恰好 50%？</div><p>判断标准：这个折扣是成本公式算出来的，还是定价决策？</p><ul><li><b>像是定价决策</b>：三家文档都写“50%”，输入输出一刀切，不随模型变（本表里 5 个模型全是 0.5×）。如果是成本公式，不同模型、不同输入输出比例应该各不相同。（原理推导）</li><li><b>但方向是真实的成本差</b>：非高峰、可排队、可抢占的算力，成本确实比实时低；50% 是服务商把一部分省下的钱让给你，同时用折扣把非紧急流量引到谷底。</li><li><b>所以不要期待它继续降</b>：它的上限由“谷底有多少空算力”决定，不是越便宜越好。</li></ul></div>
+<h2>算一笔账：100 万个请求，Sonnet 5.5 从 9,000 美元降到 4,500 美元</h2>
+<p>假设每个请求 2,000 个输入 token、500 个输出 token，共 100 万个请求。Claude Sonnet 5.5 标准价是 $2 / $10（每百万输入 / 输出 token），批处理价是 $1 / $5。</p>
+<table><thead><tr><th></th><th>输入</th><th>输出</th><th>合计</th></tr></thead><tbody><tr><td>token 总量</td><td>2,000 MTok（20 亿）</td><td>500 MTok（5 亿）</td><td>—</td></tr><tr><td>标准价</td><td>2,000 × $2 = $4,000</td><td>500 × $10 = $5,000</td><td><b>$9,000</b></td></tr><tr><td>批处理价</td><td>2,000 × $1 = $2,000</td><td>500 × $5 = $2,500</td><td><b>$4,500</b></td></tr></tbody></table>
+<p>（MTok 是百万 token。）100 万个请求超过 Anthropic 单批 10 万的上限，所以要拆成至少 10 个批次。这笔账的假设：输出长度和输入长度都是估计值，真实账单看接口返回的 <code>usage</code>。如果几十万个请求共享一段很长的系统提示词，还可以叠加提示词缓存；官方文档建议用 1 小时缓存，具体叠加多少折扣以各家价格页为准（我没有逐家核对）。</p>
+<h2>LiteLLM 把各家批处理统一成 OpenAI 的 files + batches 接口</h2>
+<p><a href="https://docs.litellm.ai/docs/batches">LiteLLM</a> 是一个开源 Python 库加代理服务（Proxy）。对批处理，它做两件事：<b>接口统一</b>（你写一次 OpenAI 格式的代码）和<b>路由</b>（按配置发到不同厂商）。它<b>不会让批处理更便宜</b>，折扣来自厂商。</p>
+<p>按 2026-11-26 的 <a href="https://docs.litellm.ai/docs/batches">LiteLLM 批处理文档</a>，支持批处理的服务商有：OpenAI、Azure、Vertex AI、Amazon Bedrock、Mistral、vLLM、xAI。这个列表里<b>没有直接的 Anthropic</b>，想用 Claude 的批处理，要么走 Bedrock 或 Vertex，要么直接用 Anthropic 自己的 SDK（软件开发包）。</p>
+<div class="fig" data-fig="proxy" id="fig-proxy"></div><p class="cap">LiteLLM Proxy 站在你的代码和各家服务商之间：校验文件、发放托管文件 id、选部署、检查归属。</p>
+<p><b>用法一：直接在 Python 里用（SDK）。</b> 先上传文件，再创建批次，轮询，最后下载。下面照搬官方文档里的 OpenAI 示例，把函数名对上就行。</p>
+<pre class='code'><code>import litellm, asyncio, os
+os.environ[&quot;OPENAI_API_KEY&quot;] = &quot;sk-...&quot;
+
+async def main():
+    # 1. 上传 mydata.jsonl（每行一个请求，格式见上文第 1 步）
+    f = await litellm.acreate_file(
+        file=open(&quot;mydata.jsonl&quot;, &quot;rb&quot;),
+        purpose=&quot;batch&quot;,
+        custom_llm_provider=&quot;openai&quot;,
+    )
+    # 2. 创建批次
+    b = await litellm.acreate_batch(
+        completion_window=&quot;24h&quot;,
+        endpoint=&quot;/v1/chat/completions&quot;,
+        input_file_id=f.id,
+        custom_llm_provider=&quot;openai&quot;,
+    )
+    # 3. 轮询，直到进入终态（completed / failed / expired / cancelled）
+    while True:
+        b = await litellm.aretrieve_batch(batch_id=b.id, custom_llm_provider=&quot;openai&quot;)
+        if b.status in (&quot;completed&quot;, &quot;failed&quot;, &quot;expired&quot;, &quot;cancelled&quot;):
+            break
+        await asyncio.sleep(30)   # 批处理以分钟计，不要 5 秒轮询一次
+    # 4. 下载结果（输出文件 id 在 completed 的批次上）
+    out = await litellm.afile_content(file_id=b.output_file_id, custom_llm_provider=&quot;openai&quot;)
+    print(out.text)
+
+asyncio.run(main())</code></pre>
+<p><b>用法二：启动 LiteLLM Proxy，用任意 OpenAI SDK 调用。</b> 适合多人、多服务共用一套密钥和限额。最小配置（来自<a href="https://docs.litellm.ai/docs/batches">官方文档</a>）：</p>
+<pre class='code'><code>model_list:
+  - model_name: gpt-6.1-sol
+    litellm_params:
+      model: openai/gpt-6.1-sol
+      api_key: os.environ/OPENAI_API_KEY
+
+files_settings:
+  - custom_llm_provider: openai
+    api_key: os.environ/OPENAI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY</code></pre>
+<pre class='code'><code>litellm --config config.yaml      # RUNNING on http://0.0.0.0:4000</code></pre>
+<p>然后客户端把 <code>base_url</code> 指向代理，其他和直接调 OpenAI 完全一样：</p>
+<pre class='code'><code>from openai import OpenAI
+client = OpenAI(base_url=&quot;http://0.0.0.0:4000&quot;, api_key=&quot;sk-&lt;your-litellm-key&gt;&quot;)
+
+f = client.files.create(file=open(&quot;request.jsonl&quot;, &quot;rb&quot;), purpose=&quot;batch&quot;)
+b = client.batches.create(input_file_id=f.id, endpoint=&quot;/v1/chat/completions&quot;,
+                          completion_window=&quot;24h&quot;)
+# 之后 client.batches.retrieve(b.id) 轮询，client.files.content(b.output_file_id) 下载</code></pre>
+<p><b>用法三：托管文件（Managed Files）：一个模型名、多个部署、负载均衡。</b> 把同一个批处理模型名配到多个部署上，并声明 <code>mode: batch</code>。上传文件时用 <code>target_model_names</code> 指定，文件会被写到所有匹配的部署，批次会在它们之间做负载均衡。来自 <a href="https://docs.litellm.ai/docs/proxy/managed_batches">Managed Files 文档</a>（该功能标注为 BETA，SDK 不支持，需要 Postgres 存文件 id）：</p>
+<pre class='code'><code>model_list:
+  - model_name: &quot;gpt-5.4-mini-batch&quot;
+    litellm_params:
+      model: azure/gpt-5.4-mini-general-deployment
+      api_base: os.environ/AZURE_API_BASE
+      api_key: os.environ/AZURE_API_KEY
+    model_info:
+      mode: batch          # 标记这是批处理模型
+
+  - model_name: &quot;gpt-5.4-mini-batch&quot;
+    litellm_params:
+      model: openai/gpt-5.4-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      mode: batch</code></pre>
+<pre class='code'><code>f = client.files.create(
+    file=open(&quot;request.jsonl&quot;, &quot;rb&quot;), purpose=&quot;batch&quot;,
+    extra_body={&quot;target_model_names&quot;: &quot;gpt-5.4-mini-batch&quot;},   # 必须和 jsonl 里的 model 一致
+)
+b = client.batches.create(input_file_id=f.id, endpoint=&quot;/v1/chat/completions&quot;,
+                          completion_window=&quot;24h&quot;)</code></pre>
+<p><b>几个容易踩的点</b>（均来自上面两份官方文档）：</p>
+<ul><li><b><code>request.jsonl</code> 里的 <code>model</code> 要用代理里的模型名</b>；在托管文件模式下，必须是 <code>mode: batch</code> 的模型名，并与上传时的 <code>target_model_names</code> 一致。</li><li><b>限额</b>：LiteLLM 默认在提交前读一遍输入文件，把 token 数和请求数记入调用者的 TPM / RPM（每分钟 token 数 / 请求数）限额，大文件会增加延迟。配置里可以关掉：<code>disable_batch_input_file_rate_limiting: true</code>。</li><li><b>归属检查</b>：每个批次和文件属于创建它的 key、用户、团队；别的团队的 key 访问会得到 403。</li><li><b>成本追踪</b>：文档的功能表写着“Cost Tracking：LiteLLM Enterprise only”，开源版不一定有这一项，我没有实际验证。</li><li><b>取消</b>：<code>client.batches.cancel(batch.id)</code>，状态先变 <code>cancelling</code>，再变 <code>cancelled</code>。</li></ul>
+<h2>只有“不急”的任务才值得用批处理，Agent 的在线链路不行</h2>
+<ol><li><b>适合</b>：离线评测、数据标注、给大量文档做摘要或打标签、批量生成嵌入、夜间报表。共同点：结果晚几小时没人在意，请求之间互相独立。</li><li><b>不适合</b>：用户在等的聊天；“第 N+1 次调用依赖第 N 次输出”的 Agent 循环。后者每一步都要排队，一条 10 步的链路最坏要等 10 个批次周期。这种场景看 Gemini Flex 或 DeepSeek 非高峰价这类同步低价档。</li><li><b>先小后大</b>：先用 10 条请求跑通整条流程，确认 <code>custom_id</code>、输出解析、错误文件处理都对，再放量。</li><li><b>按批次上限拆分</b>：OpenAI 5 万 / 200 MB，Anthropic 10 万 / 256 MB，Gemini 文件 2 GB。LiteLLM 文档里还列了 Vertex（200,000 条 / 1 GB）和 Bedrock（1 GB 每文件）的上限，路由到哪家就按最小的拆。</li><li><b>共享前缀放最前面</b>：整批都用同一段系统提示词时，保持它一字不差，缓存才可能命中（见<i>illustrate of Prefix Caching （前缀缓存）</i>）。</li><li><b>给过期留余地</b>：OpenAI 超时的批次会取消未完成的请求，已完成的照常计费；Anthropic 24 小时没跑完也会过期。设计成“只重提交失败的那几条”。</li></ol>
+<h2>给 10 岁小朋友的版本</h2>
+<ol><li><b>餐厅有两种点餐。</b> 现点现做要马上上菜，厨师得随时待命；“预订外卖，明天来取”可以等厨师不忙的时候做。</li><li><b>不忙的时候厨房也在花钱。</b> 灶台、厨师工资不会因为没客人就少掉，所以厨师很愿意在空闲时多做几份。</li><li><b>所以预订外卖打五折。</b> 不是菜更便宜，是你让厨师自己挑时间。AI 公司的 Batch 就是这样。</li><li><b>要给每份餐写个编号。</b> 外卖不一定按你下单的顺序做好，编号（custom_id）才知道哪份是哪份。</li><li><b>LiteLLM 是总机。</b> 你只对着一个电话说话，它帮你转给不同的餐厅；但它不会替餐厅打折。</li></ol>
+<h2>回顾</h2>
+<ul><li><b>形态</b>：异步批处理（OpenAI、Anthropic、Gemini、Bedrock）、同步低优先级（Gemini Flex）、分时定价（DeepSeek），都是卖时间弹性，几乎都是半价。</li><li><b>流程</b>：JSONL → 上传 → 建批次 → 排队 → 下载；结果无序，靠 <code>custom_id</code> 对号；24 小时是上限。</li><li><b>原理</b>（推导）：固定成本的 GPU 一天里有空档，批处理让服务商把活塞进去，并且可以排序、合并、抢占。50% 是定价决策，方向有成本依据。</li><li><b>LiteLLM</b>：统一接口 + 路由，不改变价格；直接的 Anthropic 不在它的批处理支持列表里。</li></ul>
+<h2>继续探索</h2>
+<ul><li><a href="https://developers.openai.com/api/docs/guides/batch">OpenAI Batch API 指南</a></li><li><a href="https://platform.claude.com/docs/en/build-with-claude/batch-processing">Anthropic 批处理文档</a></li><li><a href="https://ai.google.dev/gemini-api/docs/batch-mode">Gemini Batch API</a> 与 <a href="https://ai.google.dev/gemini-api/docs/optimization">Gemini 推理选项对比（Standard / Flex / Priority / Batch / Caching）</a></li><li><a href="https://api-docs.deepseek.com/quick_start/pricing">DeepSeek 定价页（含高峰 / 非高峰）</a></li><li><a href="https://docs.litellm.ai/docs/batches">LiteLLM Batches</a> 与 <a href="https://docs.litellm.ai/docs/proxy/managed_batches">Managed Files with Batches</a></li></ul>
+</div><script>const ICONS={};
+/* illustrated-explainer core: helpers + boot. Put your FIGS.<id> = (root)=>{...} functions between the two parts. */
+/* Figures in the visual language of "The Illustrated Transformer":
+   green = embedding x, purple = Query, orange = Key, blue = Value, pink = output z.
+   self-attention = peach box, feed-forward = light-blue box, decoder = pink outline. */
+const ROLE={x:'#b5e0a1',q:'#dcbef2',k:'#fcc990',v:'#a9cbf3',z:'#f6b2c8'};
+const TXT={x:'#6cc04a',q:'#b06fdc',k:'#f0a04b',v:'#5b9be0',z:'#e8789f'};
+const FIGS={};
+function el(tag,cls,html,st){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;if(st)Object.assign(e.style,st);return e}
+function vec(role,n=4,seed=1,sz=22){const v=el('span','vec');for(let i=0;i<n;i++){const c=el('i');c.style.background=ROLE[role];c.style.width=c.style.height=sz+'px';
+  c.style.boxShadow=`inset 0 0 0 60px rgba(255,255,255,${(0.42*Math.abs(Math.sin(seed*7.1+i*3.3))).toFixed(2)})`;v.appendChild(c)}return v}
+function chip(t,role,extra){const c=el('span','chip',t);c.style.background=ROLE[role]||'#fff';c.style.borderColor=role?'#6a6a6a':'#bbb';if(extra)Object.assign(c.style,extra);return c}
+const AV=(len=26)=>`<svg class="ar" width="12" height="${len}" viewBox="0 0 12 ${len}"><line x1="6" y1="${len}" x2="6" y2="7" stroke="#555" stroke-width="2"/><path d="M1 9 L6 0 L11 9 Z" fill="#555"/></svg>`;
+const AH=(len=34)=>`<svg class="ar" width="${len}" height="12" viewBox="0 0 ${len} 12"><line x1="0" y1="6" x2="${len-7}" y2="6" stroke="#555" stroke-width="2"/><path d="M${len-9} 1 L${len} 6 L${len-9} 11 Z" fill="#555"/></svg>`;
+const sub=(s)=>`<sub>${s}</sub>`;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const wrapOut=c=>{const d=el('div','dout');d.append(c);return d};
+function kvg(role,seed){const g=el('span','kvg');g.append(vec(role,2,seed,11),el('small','',role.toUpperCase()));g.lastChild.style.color=TXT[role];return g}
+function pauseBtn(r,ctrl){const a=el('a','pb','⏸ Pause');r._pa=a;a.onclick=()=>setPaused(r,!r._paused);ctrl.append(' · ',a)}
+function setPaused(r,v){r._paused=v;if(r._pa)r._pa.textContent=v?'▶ Resume':'⏸ Pause'}
+const unpause=r=>setPaused(r,false);
+async function psleep(r,ms){let t=0;while(t<ms){await sleep(50);if(!r._paused)t+=50}}
+
+
+/* stepper(r, N, render, caps, ms, fin): Replay / Pause / Prev / Next + fixed-height caption.
+   render(step) draws step 0..N-1; caps[step] is the caption. Resting state = step `fin` (default: last = final frame).
+   RULE: render(0) must already draw real content (first row / first diagram), never an empty scene:
+   play() shows step 0 immediately, so an empty step 0 is a blank first frame (scripts/check_first_frame.py catches it). */
+function stepper(r,N,render,caps,ms=1800,fin=N-1){
+  const cap=el('div','pxcap');const ctrl=el('div','ctrl');
+  const b1=el('a','','▶ Replay'),b2=el('a','','Next step'),b0=el('a','','Prev step');
+  ctrl.append(b1);pauseBtn(r,ctrl);ctrl.append(' · ',b0,' · ',b2);r.append(cap,ctrl);
+  let s=0,run=0;
+  const show=n=>{s=Math.max(0,Math.min(N-1,n));render(s);cap.textContent=caps[s]};
+  const play=async()=>{const id=++run;unpause(r);show(0);for(let i=1;i<N;i++){await psleep(r,ms);if(id!==run)return;show(i)}};
+  b1.onclick=play;b2.onclick=()=>{run++;show(s+1)};b0.onclick=()=>{run++;show(s-1)};
+  show(fin);r._f={play,final:()=>{run++;show(fin)}};
+}
+
+/* ===== add figures here: FIGS.myfig=(r)=>{...; r._f={play,final}} ===== */
+/* Batch API figures. Calm palette: slate #b8c0c8 baseline, blue #5b8fd0 subject, amber #f0b24b active, red #d9534f limit. */
+const SL='#b8c0c8',BL='#5b8fd0',AM='#f0b24b',RD='#d9534f';
+const sw=(c,t,dash)=>`<span class="bt-sw"><i style="background:${c}${dash?';border:1.5px dashed '+RD+';background:#fff':''}"></i>${t}</span>`;
+const legend=(items)=>el('div','bt-leg',items.join(''));
+const stat=r=>{r._f={play(){},final(){}}};
+
+/* 1. price: standard vs batch, static */
+FIGS.price=r=>{
+  const rows=[['Claude Opus 5.5',[4,2],[20,10]],['Claude Sonnet 5.5',[2,1],[10,5]],['Claude Haiku 5.5',[0.10,0.05],[0.50,0.25]],
+              ['DeepSeek V4 Pro',[1.32,0.66],[3.96,1.98]],['DeepSeek V4 Flash',[0.30,0.15],[1.20,0.60]]];
+  const W=170,mx=[4,20];
+  const f=n=>'$'+(n%1?n.toFixed(2):n);
+  const w=el('div','bt-w');
+  w.append(legend([sw(SL,'Standard (real-time) price'),sw(BL,'Batch price (Claude) / off-peak price (DeepSeek)')]));
+  const g=el('div','bt-pg');
+  g.append(el('div','bt-h','Model'),el('div','bt-h','Input · $ per 1M tokens'),el('div','bt-h','Output · $ per 1M tokens'),el('div','bt-h','Batch ÷ standard'));
+  rows.forEach(([n,i,o])=>{
+    g.append(el('div','bt-n',n));
+    [i,o].forEach((p,k)=>{
+      const c=el('div','bt-bars');
+      p.forEach((v,j)=>{const b=el('div','bt-br');b.append(el('i','',null,{width:Math.max(3,v/mx[k]*W)+'px',background:j?BL:SL}),el('span','',f(v)));c.append(b)});
+      g.append(c)});
+    g.append(el('div','bt-x','0.5×'));
+  });
+  w.append(g);r.append(w);stat(r)};
+
+/* 2. lifecycle: stepper */
+FIGS.life=r=>{
+  const st=['1 Write JSONL','2 Upload file','3 Create batch','4 Wait in queue','5 Download results'];
+  const w=el('div','bt-w');const row=el('div','bt-st');const boxes=st.map(t=>{const b=el('div','bt-sb',t);row.append(b);return b});
+  const clk=el('div','bt-clk');const pan=el('pre','bt-pan');w.append(row,clk,pan);r.append(w);
+  const P=[
+`{"custom_id":"r1","method":"POST","url":"/v1/chat/completions","body":{...}}
+{"custom_id":"r2","method":"POST","url":"/v1/chat/completions","body":{...}}
+{"custom_id":"r3","method":"POST","url":"/v1/chat/completions","body":{...}}`,
+`POST /v1/files   purpose="batch"   file=requests.jsonl
+→ { "id": "file-abc123" }`,
+`POST /v1/batches   { "input_file_id": "file-abc123",
+                     "endpoint": "/v1/chat/completions",
+                     "completion_window": "24h" }
+→ { "id": "batch_789", "status": "validating" }`,
+`GET /v1/batches/batch_789
+→ status: in_progress     (request_counts: 2 / 3 done)
+You are not holding a connection. The provider runs it when capacity is free.`,
+`GET /v1/batches/batch_789 → status: completed, output_file_id: "file-out1"
+{"custom_id":"r3", ...}   <- order NOT guaranteed
+{"custom_id":"r1", ...}   <- match results by custom_id
+{"custom_id":"r2", ...}`];
+  const T=['seconds','seconds','seconds','minutes to hours (up to 24h)','seconds'];
+  const caps=['第 1 步：每行一个请求，自己起一个 custom_id，之后靠它对号入座。',
+   '第 2 步：先把整个 JSONL 文件上传，换回一个 file id。',
+   '第 3 步：用 file id 创建批次，必须声明 completion_window（24 小时）。这一步马上返回，不等结果。',
+   '第 4 步：这是便宜的来源：服务商在算力空闲时才处理你的请求，你只需要隔一会儿查一次状态。',
+   '第 5 步：完成后下载输出文件。结果顺序不保证和输入一致，用 custom_id 匹配。'];
+  stepper(r,5,s=>{boxes.forEach((b,i)=>{b.className='bt-sb'+(i<s?' done':i==s?' on':'')});
+    clk.innerHTML='time spent on this step: <b>'+T[s]+'</b>';pan.textContent=P[s]},caps,2200)};
+
+/* 3. valley: schematic 24h load, static SVG */
+FIGS.valley=r=>{
+  const W=720,H=262,L=44,R=26,T=30,B=44,pw=W-L-R,ph=H-T-B,X=h=>L+h/24*pw,Y=v=>T+ph-v*ph;
+  const dem=h=>{const g=(c,s,a)=>a*Math.exp(-((h-c)**2)/(2*s*s));return Math.min(.9,.22+g(2.6,1.5,.55)+g(8,2,.62)+g(14.5,2.2,.35))};
+  let d='',top='';for(let h=0;h<=24;h+=.25){top+=(h?'L':'M')+X(h).toFixed(1)+' '+Y(dem(h)).toFixed(1)}
+  const cap=Y(.95);
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font:12px Helvetica,Arial,sans-serif">`;
+  [[1,4],[6,10]].forEach(([a,b])=>s+=`<rect x="${X(a)}" y="${T}" width="${X(b)-X(a)}" height="${ph}" fill="${AM}" opacity=".22"/>`);
+  s+=`<path d="${top} L${X(24)} ${Y(.95)} L${X(0)} ${Y(.95)} Z" fill="${BL}" opacity=".85"/>`;
+  s+=`<path d="${top} L${X(24)} ${Y(0)} L${X(0)} ${Y(0)} Z" fill="${SL}"/>`;
+  s+=`<line x1="${L}" x2="${W-R}" y1="${cap}" y2="${cap}" stroke="${RD}" stroke-width="2" stroke-dasharray="6 4"/>`;
+  s+=`<line x1="${L}" x2="${W-R}" y1="${Y(0)}" y2="${Y(0)}" stroke="#888"/>`;
+  for(let h=0;h<=24;h+=3)s+=`<text x="${X(h)}" y="${Y(0)+16}" text-anchor="middle" fill="#777">${String(h).padStart(2,'0')}:00</text>`;
+  s+=`<text x="${X(2.5)}" y="${T-8}" text-anchor="middle" fill="#a06a00">peak</text><text x="${X(8)}" y="${T-8}" text-anchor="middle" fill="#a06a00">peak</text>`;
+  s+=`<text x="${L+pw/2}" y="${H-6}" text-anchor="middle" fill="#777">Hour of day, UTC (weekdays)</text>`;
+  s+=`<text x="${L-8}" y="${Y(.95)+4}" text-anchor="end" fill="${RD}">100%</text><text x="${L-8}" y="${Y(0)+4}" text-anchor="end" fill="#777">0</text></svg>`;
+  const w=el('div','bt-w');
+  w.append(legend([sw(SL,'Real-time requests (schematic)'),sw(BL,'Idle GPU time for batch jobs'),sw('#fff','GPU capacity',1),sw('#f9e3b8','DeepSeek peak hours')]));
+  const c=el('div','bt-svg',s);w.append(c);r.append(w);stat(r)};
+
+/* 4. proxy: LiteLLM, static */
+FIGS.proxy=r=>{
+  const w=el('div','bt-w');
+  w.append(legend([sw(BL,'Your code'),sw(AM,'LiteLLM Proxy'),sw(SL,'Provider that actually runs the batch')]));
+  const g=el('div','bt-px');
+  const a=el('div','bt-bx bl','<b>Your script</b><small>OpenAI SDK<br>base_url = proxy<br>api_key = virtual key</small>');
+  const m=el('div','bt-bx am','<b>LiteLLM Proxy</b><ol><li>check file, count tokens against TPM / RPM</li><li>store a managed file id (needs Postgres)</li><li>route by <code>target_model_names</code></li><li>check key / team owns the batch</li></ol>');
+  const p=el('div','bt-prov');['Azure OpenAI (Global Batch)','OpenAI','Vertex AI (GCS bucket)','Amazon Bedrock (S3 bucket)'].forEach(t=>p.append(el('div','bt-bx sl',t)));
+  g.append(a,el('div','bt-ar','→<small>files<br>batches</small>'),m,el('div','bt-ar','→<small>native<br>batch API</small>'),p);
+  w.append(g);r.append(w);stat(r)};
+
+/* boot */
+document.querySelectorAll('.fig[data-fig]').forEach(r=>{const f=FIGS[r.dataset.fig];if(f)f(r)});
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&!e.target._seen&&!window.FROZEN){e.target._seen=1;e.target._f&&e.target._f.play&&e.target._f.play()}}),{threshold:.45});
+document.querySelectorAll('.fig').forEach(r=>io.observe(r));
+window.renderFinal=()=>{window.FROZEN=true;document.body.classList.add('static');document.querySelectorAll('.fig').forEach(r=>r._f&&r._f.final&&r._f.final())};
+
+/* figure-only mode: ...html#only-<id> shows just that figure (used for per-figure embeds in notes).
+   Every embedded figure is zoomed so its CONTENT is the same width (FIGW px, capped by the pane), then reports its height to the note. */
+(function(){const m=location.hash.match(/^#only-(\w+)/);if(!m)return;const id=m[1];
+  document.body.classList.add('only');
+  document.querySelectorAll('.wrap > *').forEach(e=>{if(e.id!=='fig-'+id)e.style.display='none'});
+  const f=document.getElementById('fig-'+id);if(f){f.style.margin='0 auto';f.style.padding='8px 0'}
+  document.querySelector('.wrap').style.padding='0';
+  const FIGW=760,ZMIN=.6,ZMAX=1.8;
+  const fit=()=>{if(!f)return;f.style.zoom=1;
+    const fw=f.clientWidth;let l=1e9,r=-1e9;
+    f.querySelectorAll('*').forEach(e=>{if(e.closest('.cap,.vlcap,.ctrl'))return;
+      const b=e.getBoundingClientRect();if(!b.width||!b.height||b.width>=fw-2)return;l=Math.min(l,b.left);r=Math.max(r,b.right)});
+    let nat=r-l;if(f.scrollWidth>fw)nat=Math.max(nat,f.scrollWidth);if(!(nat>0))return;
+    const z=Math.max(ZMIN,Math.min(ZMAX,FIGW/nat,(innerWidth-24)/nat));
+    f.style.zoom=z;window.__fig={nat:Math.round(nat),zoom:+z.toFixed(2)};
+    parent.postMessage({figH:Math.ceil(f.getBoundingClientRect().height)+16,fig:id},'*')};
+  setTimeout(()=>{f&&f._f&&f._f.play&&f._f.play();setTimeout(fit,150)},250);
+  addEventListener('resize',fit)})();
+
+</script></body></html>

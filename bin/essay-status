@@ -1,0 +1,219 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Compare illustrated Obsidian essays with the published zh/en posts.
+# Rules: .agents/skills/publish-essay/SKILL.md
+# Registry: _data/published_essays.yml
+
+require "digest"
+require "json"
+require "optparse"
+require "yaml"
+
+ROOT = File.expand_path("..", __dir__)
+REGISTRY = File.join(ROOT, "_data/published_essays.yml")
+VAULT_DEFAULT = "/Users/donhuang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Agent"
+
+HEX = /[0-9a-f]{64}/
+
+def normalize(text)
+  text = text.to_s.dup.force_encoding(Encoding::UTF_8)
+  text = text.encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
+  text = text.gsub("\r\n", "\n").gsub("\r", "\n")
+  lines = text.split("\n", -1).map { |line| line.sub(/[ \t]+\z/, "") }
+  lines.pop while !lines.empty? && lines.last.empty?
+  "#{lines.join("\n")}\n"
+end
+
+def split_front_matter(text)
+  return ["", text] unless text.start_with?("---\n")
+  match = text.match(/\A---\n.*?\n---\n/m)
+  return ["", text] unless match
+
+  [match[0], match.post_match]
+end
+
+def sha256(text)
+  Digest::SHA256.hexdigest(text)
+end
+
+def read_utf8(path)
+  File.binread(path).force_encoding(Encoding::UTF_8)
+end
+
+def body_sha(path)
+  _fm, body = split_front_matter(normalize(read_utf8(path)))
+  sha256(normalize(body))
+end
+
+def file_sha(path)
+  sha256(normalize(read_utf8(path)))
+end
+
+def front_value(path, key)
+  return nil unless File.file?(path)
+
+  fm, = split_front_matter(normalize(read_utf8(path)))
+  line = fm.lines.find { |item| item.match?(/\A#{Regexp.escape(key)}:\s*/) }
+  return nil unless line
+
+  line.sub(/\A#{Regexp.escape(key)}:\s*/, "").strip.delete_prefix('"').delete_suffix('"')
+end
+
+def upsert_front_matter(path, pairs)
+  text = read_utf8(path).gsub("\r\n", "\n").gsub("\r", "\n")
+  match = text.match(/\A---\n.*?\n---\n/m)
+  abort "no front matter: #{path}" unless match
+
+  lines = match[0].lines
+  pairs.each do |key, value|
+    replacement = "#{key}: #{value}\n"
+    index = lines.index { |line| line.match?(/\A#{Regexp.escape(key)}:\s*/) }
+    if index
+      lines[index] = replacement
+    else
+      lines.insert(-2, replacement)
+    end
+  end
+  File.write(path, lines.join + match.post_match)
+end
+
+def load_registry
+  data = YAML.safe_load(File.read(REGISTRY))
+  essays = data.fetch("essays")
+  abort "registry has no essays" unless essays.is_a?(Array) && !essays.empty?
+
+  essays
+end
+
+def inspect_essay(essay, vault)
+  source = File.join(vault, essay.fetch("source"))
+  figure = File.join(vault, essay.fetch("figure"))
+  zh = File.join(ROOT, essay.fetch("zh_post"))
+  en = File.join(ROOT, essay.fetch("en_post"))
+  asset = File.join(ROOT, essay.fetch("figure_asset"))
+  abort "missing source #{source}" unless File.file?(source)
+  abort "missing figure #{figure}" unless File.file?(figure)
+
+  live_source = body_sha(source)
+  live_figure = file_sha(figure)
+  live_asset = File.file?(asset) ? file_sha(asset) : nil
+  zh_source = front_value(zh, "source_sha")
+  zh_figure = front_value(zh, "figure_sha")
+  en_from = front_value(en, "translated_from_sha")
+  en_figure = front_value(en, "figure_sha")
+  en_body_recorded = front_value(en, "en_body_sha")
+  live_en_body = File.file?(en) ? body_sha(en) : nil
+  note_sha = front_value(source, "published_sha")
+  note_id = front_value(source, "published_id")
+
+  status = if !File.file?(zh) || !File.file?(en)
+             "missing"
+           elsif zh_source != live_source
+             "source-drifted"
+           elsif zh_figure != live_figure || en_figure != live_figure || live_asset != live_figure
+             "figure-drifted"
+           elsif en_from != live_source
+             "translation-drifted"
+           elsif en_body_recorded.nil? || en_body_recorded.empty? || en_body_recorded == "pending" || !en_body_recorded.match?(HEX)
+             "needs-en-hash"
+           elsif en_body_recorded != live_en_body
+             "en-hand-edited"
+           elsif note_sha != live_source || note_id != essay.fetch("id")
+             "unstamped"
+           else
+             "synced"
+           end
+
+  {
+    "id" => essay.fetch("id"),
+    "status" => status,
+    "source_sha" => live_source,
+    "figure_sha" => live_figure,
+    "zh_post" => essay.fetch("zh_post"),
+    "en_post" => essay.fetch("en_post"),
+    "figure_asset" => essay.fetch("figure_asset"),
+    "zh_exists" => File.file?(zh),
+    "en_exists" => File.file?(en),
+    "asset_exists" => File.file?(asset),
+    "zh_source_sha" => zh_source,
+    "zh_figure_sha" => zh_figure,
+    "translated_from_sha" => en_from,
+    "en_figure_sha" => en_figure,
+    "en_body_sha" => en_body_recorded,
+    "live_en_body_sha" => live_en_body,
+    "asset_sha" => live_asset,
+    "note_published_sha" => note_sha,
+    "note_published_id" => note_id,
+    "source" => essay.fetch("source")
+  }
+end
+
+def posts_match_vault?(row)
+  row["zh_exists"] && row["en_exists"] && row["asset_exists"] &&
+    row["zh_source_sha"] == row["source_sha"] &&
+    row["zh_figure_sha"] == row["figure_sha"] &&
+    row["translated_from_sha"] == row["source_sha"] &&
+    row["en_figure_sha"] == row["figure_sha"] &&
+    row["asset_sha"] == row["figure_sha"]
+end
+
+options = { json: false, stamp: nil, fill_en_hash: nil, vault: ENV.fetch("ESSAY_VAULT", VAULT_DEFAULT) }
+OptionParser.new do |parser|
+  parser.banner = "Usage: ruby bin/essay-status [--json] [--stamp ID] [--fill-en-hash ID]"
+  parser.on("--json") { options[:json] = true }
+  parser.on("--stamp ID") { |id| options[:stamp] = id }
+  parser.on("--fill-en-hash ID") { |id| options[:fill_en_hash] = id }
+  parser.on("--vault PATH") { |path| options[:vault] = path }
+end.parse!
+
+essays = load_registry
+rows = essays.map { |essay| inspect_essay(essay, options[:vault]) }
+selected = ->(id) { id == "all" ? rows : rows.select { |row| row["id"] == id } }
+
+if options[:fill_en_hash]
+  targets = selected.call(options[:fill_en_hash])
+  abort "unknown id #{options[:fill_en_hash]}" if targets.empty?
+
+  targets.each do |row|
+    abort "#{row["id"]} is not ready to record en_body_sha (#{row["status"]})" unless posts_match_vault?(row)
+
+    upsert_front_matter(File.join(ROOT, row["en_post"]), "en_body_sha" => body_sha(File.join(ROOT, row["en_post"])))
+  end
+  rows = essays.map { |essay| inspect_essay(essay, options[:vault]) }
+end
+
+if options[:stamp]
+  targets = selected.call(options[:stamp])
+  abort "unknown id #{options[:stamp]}" if targets.empty?
+
+  today = Time.now.strftime("%Y-%m-%d")
+  targets.each do |row|
+    ready = posts_match_vault?(row) && row["en_body_sha"] == row["live_en_body_sha"]
+    abort "#{row["id"]} is not ready to stamp (#{row["status"]})" unless ready
+
+    upsert_front_matter(
+      File.join(options[:vault], row["source"]),
+      "published_id" => row["id"],
+      "published_sha" => row["source_sha"],
+      "published_at" => today
+    )
+  end
+  rows = essays.map { |essay| inspect_essay(essay, options[:vault]) }
+end
+
+if options[:json]
+  puts JSON.generate("vault" => options[:vault], "essays" => rows)
+else
+  rows.each do |row|
+    puts format("%-16s %s", row["id"], row["status"])
+    puts "  source_sha   #{row["source_sha"]}"
+    puts "  figure_sha   #{row["figure_sha"]}"
+    puts "  zh           #{row["zh_exists"] ? row["zh_source_sha"] : "missing"}  #{row["zh_post"]}"
+    puts "  en           #{row["en_exists"] ? row["translated_from_sha"] : "missing"}  #{row["en_post"]}"
+    puts "  figure copy  #{row["asset_exists"] ? row["asset_sha"] : "missing"}  #{row["figure_asset"]}"
+    puts "  note         #{row["note_published_sha"] || "unmarked"}"
+  end
+end
+
+exit(rows.all? { |row| row["status"] == "synced" } ? 0 : 1)

@@ -1,0 +1,78 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Publishes an illustrated essay from the Obsidian vault.
+# The vault HTML is copied to assets/essays/<id>.html with SITE_SKIN added before </head>
+# (the path is listed under jekyll-minifier.exclude so the minifier leaves it alone), and _pages/essay-<id>.md
+# shows it under the site navbar at <zh_permalink>. An English translation in _essays/en/<id>.html is
+# published the same way at <en_permalink>.
+#
+#   ruby bin/build-essay-page            # every essay with live: true
+#   ruby bin/build-essay-page kv-cache
+
+require "yaml"
+require "fileutils"
+require "digest/sha2"
+
+ROOT = File.expand_path("..", __dir__)
+VAULT = ENV.fetch("ESSAY_VAULT", "/Users/donhuang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Agent")
+
+# Site typography (Roboto, 16px, warm paper) layered over the vault styles, so an essay reads like the rest of
+# the site. Figures keep their own px sizes. Values mirror assets/css/main.scss and al_folio_core.
+SITE_SKIN = <<~HTML
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+  <style>
+  body{font-family:Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;font-weight:300;line-height:1.6;color:#1f2328;background:#fbfaf7}
+  .wrap{max-width:930px;padding:0 15px 80px}
+  h1{font-size:32px;font-weight:300;line-height:1.2;margin:48px 0 20px;color:#1f2328}
+  h2{font-size:21.6px;font-weight:400;line-height:1.3;margin:44px 0 12px;color:#1f2328}
+  h3{font-size:17.6px;font-weight:500;line-height:1.4;margin:28px 0 8px;color:#1f2328}
+  p,ul,ol{margin-bottom:16px}
+  b,strong{font-weight:500}
+  a{color:#1d4e89}
+  table{font-size:14.4px}
+  .cap{font-size:13.6px;color:#5f6670}
+  .dtag{background:#fbfaf7}
+  </style>
+HTML
+
+essays = YAML.safe_load(File.read(File.join(ROOT, "_data/published_essays.yml")))["essays"]
+essays = ARGV.empty? ? essays.select { |e| e["live"] } : essays.select { |e| ARGV.include?(e["id"]) }
+abort "no essay matched" if essays.empty?
+
+def publish(id, src, asset_name, page_name, title, permalink, description, extra = "")
+  asset = File.join(ROOT, "assets/essays/#{asset_name}")
+  FileUtils.mkdir_p(File.dirname(asset))
+  html = File.read(src, encoding: "UTF-8")
+  abort "#{id}: no </head> in #{src}" unless html.include?("</head>")
+  File.write(asset, html.sub("</head>") { "#{SITE_SKIN}</head>" })
+
+  File.write(File.join(ROOT, "_pages/#{page_name}"), <<~MD)
+    ---
+    layout: default
+    title: "#{title}"
+    permalink: #{permalink}
+    description: "#{description}"
+    nav: false
+    ---
+
+    <iframe class="essay-frame" src="{{ '/assets/essays/#{asset_name}' | relative_url }}?v=#{Digest::SHA256.file(asset).hexdigest[0, 10]}" title="{{ page.title }}"></iframe>
+    #{extra}
+  MD
+  puts "#{id} -> #{permalink}"
+end
+
+ZH_NAV = %(<script src="{{ '/assets/js/zh-nav.js' | relative_url }}"></script>)
+
+essays.each do |e|
+  id = e["id"]
+  publish(id, File.join(VAULT, e["figure"]), "#{id}.html", "essay-#{id}.md",
+          e["title_zh"].split("：").first, e["zh_permalink"], e["summary_zh"], ZH_NAV)
+
+  # English translation, written from the Chinese HTML (see .agents/skills/publish-essay/SKILL.md).
+  en = File.join(ROOT, "_essays/en/#{id}.html")
+  next unless File.exist?(en)
+
+  publish(id, en, "#{id}.en.html", "essay-#{id}-en.md",
+          e["title_en"].split(":").first, e["en_permalink"], e["summary_en"])
+end

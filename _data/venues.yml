@@ -2,6 +2,24 @@
   url: https://aapt.scitation.org/journal/ajp
   color: "#00369f"
 
+"Electronics":
+  url: https://www.mdpi.com/journal/electronics
+
+"ECAI":
+  url: https://doi.org/10.3233/FAIA230592
+
+"SEKE":
+  url: https://doi.org/10.18293/seke2023-200
+
+"CCKS":
+  url: https://doi.org/10.1007/978-981-16-6471-7_20
+
+"arXiv":
+  url: https://arxiv.org/
+
+"SSRN":
+  url: https://www.ssrn.com/
+
 "PhysRev":
   url: https://journals.aps.org/
 
