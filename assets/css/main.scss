@@ -570,6 +570,15 @@ article img,
   }
 }
 
+// al_search renders "ctrl k" and only swaps in "⌘ k" after load, so the hint flickers on every page; show just the icon.
+.navbar.navbar-light #search-toggle .nav-link {
+  font-size: 0;
+
+  i {
+    font-size: 1rem;
+  }
+}
+
 // CV: same rhythm as the Research page, dates on the left and the entry on the right.
 .cv {
   margin-top: 0.5rem;
