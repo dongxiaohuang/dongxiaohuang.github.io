@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>图解 KV Cache</title><style>*{box-sizing:border-box}
+body{margin:0;font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:#222;font-size:18px;line-height:1.5;background:#fff}
+.wrap{max-width:940px;margin:0 auto;padding:0 24px 80px}
+header.site{padding:28px 0 18px;border-bottom:1px solid #e6e6e6}
+header .t{font-size:30px;font-weight:300;color:#333}header .s{font-size:16px;color:#666}
+h1{font-size:28px;font-weight:700;margin:64px 0 22px;color:#222}
+h2{font-size:24px;font-weight:700;margin:58px 0 18px;color:#222}
+h3{font-size:20px;font-weight:700;margin:36px 0 14px;color:#222}
+p{margin:0 0 17px}
+.meta{font-size:14px;color:#666;margin:7px 0}
+.upd{margin:30px 0 30px;padding-left:14px;border-left:4px solid #ddd;font-size:16px;color:#444}
+a{color:#4183c4;text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+code{font-family:"Bitstream Vera Sans Mono",Courier,monospace;color:#c7254e;background:#f9f2f4;padding:2px 4px;border-radius:4px;font-size:.88em}
+ul,ol{margin:0 0 17px;padding-left:26px}li{margin:6px 0}
+table{border-collapse:collapse;margin:22px auto;font-size:15px}th,td{border:1px solid #ddd;padding:7px 12px;text-align:left}th{background:#f7f7f7}
+.fig{margin:30px auto 4px;padding:14px 0 4px;text-align:center;position:relative}
+.fig.shot img{max-width:100%;border:1px solid #e3e3e3;border-radius:6px}
+.cap{font-size:14px;color:#999;text-align:center;margin:8px auto 30px;max-width:780px;line-height:1.45}
+.ctrl{font-size:13px;color:#aaa;margin-top:10px}
+/* shared figure parts */
+.flex{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.mid{align-items:center}
+.col{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lab,.lab2{font-size:13px;color:#888;margin:6px 0}
+.vec{display:inline-flex;border:1px solid #666;vertical-align:middle}
+.vec i{display:block;border-right:1px solid #666}.vec i:last-child{border-right:0}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:38px;padding:0 10px;border:2px solid #6a6a6a;border-radius:8px;margin:3px;font-size:17px;background:#fff;transition:background .3s}
+.tok{font-weight:700;font-size:18px;margin-top:4px}.tok.x{color:#6cc04a}
+.lx{color:#6cc04a}.big{font-size:20px}
+.tag.price{font-size:13px;background:#f4f4f4;border-radius:10px;padding:2px 10px;color:#555}
+.blackbox{background:#3a3a46;color:#fff;border-radius:14px;padding:22px 26px;font-size:17px;line-height:1.3}.blackbox.small{padding:12px 16px;font-size:14px}.blackbox small{color:#bbb}
+.ar{display:block;margin:0 auto}
+.bx{border:2.5px solid #4a4a58;border-radius:12px;padding:9px 20px;font-size:14px;color:#444;font-weight:600;line-height:1.3;min-width:150px}
+.bx small{font-weight:400;color:#888}.bx.sa{background:#fcefdf}.bx.ff{background:#e6eefb}.bx.wide{width:100%}
+.dec{border:2.5px solid #eba7c6;border-radius:16px;padding:16px 16px 8px;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:#fff}
+.dtag{position:absolute;top:-10px;left:14px;background:#fff;padding:0 6px;font-size:11px;letter-spacing:.6px;color:#e393b8}
+.dec.stack{gap:8px}.mini{border:2px solid #eba7c6;border-radius:10px;padding:6px 18px;font-size:13px;color:#777;background:#fdf1f6}
+/* paths */
+.paths{display:flex;flex-direction:column;align-items:center;gap:2px;max-width:560px;margin:0 auto}
+.prow{display:flex;gap:16px;justify-content:center;width:100%}.prow>div{flex:1;display:flex;flex-direction:column;align-items:center}
+.pc{align-items:center}
+/* qkv + attention grids */
+.qgrid,.agrid{display:grid;grid-template-columns:130px repeat(3,150px) 90px;gap:10px 8px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.rl{color:#666;font-size:15px;font-weight:600;text-align:right;padding-right:10px}
+.cc{display:flex;align-items:center;justify-content:center;gap:4px;min-height:34px;font-size:14px}
+.cc.ghost{color:#bbb;font-size:12px}.num{font-weight:700;font-size:16px;color:#555}.sm{font-size:12px;color:#888}
+.wm{display:grid;grid-template-columns:repeat(3,13px);gap:0;border:1px solid #bbb}.wm i{display:block;width:13px;height:13px;border:1px solid}
+.wcell{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.wb{height:6px;background:#dcbef2;border-radius:3px;margin-left:4px}
+.hid{opacity:0;visibility:hidden}
+.agrid>*{transition:opacity .45s}
+.anote{margin-top:16px;font-size:14px;color:#c0602a;font-weight:600;border:2px dashed #f0a04b;border-radius:10px;display:inline-block;padding:6px 14px;transition:opacity .45s}
+.agrid.hl .rl{}
+/* decoding */
+.drows{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+.drow{display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .5s;flex-wrap:nowrap}
+.dlab{width:84px;font-size:14px;font-weight:700;color:#555;text-align:right;line-height:1.25}.dlab small{font-weight:400;color:#999}
+.dtoks{display:flex;gap:2px;min-width:340px;justify-content:flex-start}
+.dtok{display:flex;flex-direction:column;align-items:center;padding:4px 3px;border-radius:8px;border:2px solid transparent}
+.dtok .kv{display:flex;gap:3px;margin-top:2px}
+.dtok.cached{opacity:.55;border:2px dashed #bbb;background:#fafafa}.dtok:not(.cached){border-color:#f5d28a;background:#fffaf0}
+.ctag{font-size:11px;color:#999;margin-top:2px}.dtok:not(.cached) .ctag{color:#d08a1a}
+.mini2{padding:16px 12px 10px;font-size:13px;color:#777;min-width:96px;background:#fdf1f6}.mini2 .dtag{position:absolute}
+.cnt{font-size:13px;color:#888;min-width:140px;text-align:left}.cnt b{font-size:18px;color:#c0602a}
+.pulse .dtok:not(.cached){animation:pl 1s ease}@keyframes pl{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.drow{transition:opacity .5s}.tot{margin-top:18px;font-size:16px;font-weight:600;color:#555;transition:opacity .45s}.tot b{font-size:24px;color:#c0602a}
+/* timeline */
+.tl{max-width:760px;margin:0 auto;text-align:left}
+.lane{display:flex;align-items:center;gap:14px;margin:12px 0;transition:opacity .5s}
+.ln{width:70px;font-weight:700;color:#555;text-align:right;font-size:15px}
+.bar{border:2px solid #4a4a58;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.3;text-align:center;transition:opacity .5s}.bar small{color:#777;font-size:12px}
+.bar.pf{background:#e6eefb;width:300px}.bar.dc{background:#fcefdf;width:150px}
+.seq{display:flex;gap:10px}.axis{text-align:right;color:#aaa;font-size:13px;border-top:2px solid #ccc;margin-top:14px;padding-top:4px}
+/* memory */
+.mem{max-width:720px;margin:0 auto}.memlab{font-size:13px;color:#888;margin-bottom:4px;text-align:left}
+.membar{display:flex;height:48px;border:2.5px solid #4a4a58;border-radius:10px;overflow:hidden;background:#fafafa}
+.seg{display:flex;align-items:center;justify-content:center;font-size:13px;white-space:nowrap;overflow:hidden;transition:width .2s}.seg.w{background:#e6e6ee}.seg.kv{background:linear-gradient(90deg,#fcc990 50%,#a9cbf3 50%);color:#333}.seg.kv.over{background:#f7b9b9}
+.meminfo{margin:10px 0;font-size:15px;color:#555;min-height:22px}
+.sls{display:flex;gap:30px;justify-content:center;flex-wrap:wrap}.sl{font-size:14px;color:#555}.sl input{vertical-align:middle;margin-left:8px;width:170px}
+/* compress */
+.crow{display:flex;align-items:flex-end;gap:14px;margin:18px auto;max-width:900px;text-align:left;transition:opacity .5s}
+.cl{width:150px;font-size:14px;line-height:1.3;flex:none}.cl small{color:#888}
+.blocks{display:flex;gap:2px;align-items:flex-end;flex-wrap:nowrap}
+.kvb{display:flex;flex-direction:column;border:1px solid #666;border-radius:2px;overflow:hidden}.kvb i{flex:1;display:block}
+/* prefix */
+.prow2{display:flex;justify-content:center;flex-wrap:wrap;margin:2px 0}.pinfo{margin:14px 0 4px;font-size:15px;color:#555}.pinfo b{font-size:20px;color:#c0602a}
+/* bars */
+.mb{max-width:720px;margin:16px auto;text-align:left}.brow{display:flex;align-items:center;margin:4px 0;font-size:13px}.bl{width:118px;color:#777;flex:none}
+.brow i{display:block;height:18px;border:1px solid #888;border-radius:3px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}.brow em{font-style:normal;margin-left:8px;color:#555}
+@media(max-width:760px){.qgrid,.agrid{grid-template-columns:90px repeat(3,100px) 60px;font-size:12px}.drow{flex-wrap:wrap}}
+
+/* unified price chart */
+.pgrid{display:grid;grid-template-columns:214px 80px 80px 80px 1fr 1.15fr;gap:7px 10px;align-items:center;max-width:900px;margin:0 auto;text-align:left;font-size:14px}
+.ph{font-size:12px;color:#777;font-weight:600;line-height:1.25}.ph.wide{padding-left:2px}
+.dot{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a;margin-right:5px;vertical-align:-1px}
+.pn{color:#333;font-weight:600}.pn small{display:block;color:#999;font-size:11px;font-weight:400;line-height:1.1}
+.pcell{border:1px solid #6a6a6a;border-radius:6px;padding:3px 0;text-align:center;font-size:13px;color:#333}
+.pbar{display:flex;align-items:center;gap:8px}.pbar i{display:block;height:16px;border:1px solid #6a6a6a;border-radius:3px;width:0}.pbar b{font-size:13px;color:#555}
+.sep{margin-top:6px}
+.pn{display:flex;align-items:center;gap:9px}.vi{width:26px;height:26px;border-radius:6px;flex:none}
+.static .ctrl{display:none}
+.pgrid{padding:0 6px}
+
+.vcell{position:relative;display:inline-flex;vertical-align:middle}
+.vl{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:7px;font-size:14px;white-space:nowrap}
+.erow{display:flex;justify-content:center;gap:90px}.ecol{display:flex;flex-direction:column;align-items:center;gap:8px;width:120px}
+.static .fig{padding:28px 44px 28px}
+
+.nowrap{flex-wrap:nowrap}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+#fig-bill .blackbox{padding:18px 18px;font-size:16px;min-width:150px}
+#fig-decode0 .chip,#fig-decode1 .chip{min-width:0;padding:0 7px;height:32px;font-size:15px;margin:2px}
+.dtoks{min-width:350px}.dlab{width:104px}.cnt{min-width:110px}
+.bar.dc{width:205px}
+.cl{width:215px}
+
+/* prefill figure */
+.pfig{display:grid;grid-template-columns:370px 104px 300px;gap:0 8px;align-items:center;max-width:820px;margin:0 auto;text-align:center}
+.pfl{display:flex;flex-direction:column;align-items:center;gap:6px}
+.pfbadge{align-self:flex-start;font-size:12px;letter-spacing:1px;font-weight:700;color:#fff;background:#6cc04a;border-radius:10px;padding:2px 12px;transition:background .3s}.pfbadge.d{background:#e8789f}
+.pfout{display:flex;gap:6px;min-height:44px;align-items:center}
+.pfdec{padding:20px 18px 12px;font-size:13px;color:#555;width:100%;transition:all .4s}.pfdec small{color:#999}.pfdec.hot{background:#fff6fa;box-shadow:0 0 0 4px #f7c9dc}
+.pfin{display:flex;gap:6px;justify-content:center;min-height:66px}
+.pfcol{display:flex;flex-direction:column;align-items:center;gap:2px;transition:opacity .4s}.pfcol.hot .chip{box-shadow:0 0 0 3px #f5d28a}
+.hide{opacity:0;visibility:hidden}
+.pfin .pfcol.hide{display:none}.pfout .chip{transition:opacity .4s}
+.pfmid{font-size:13px;color:#c0602a;font-weight:600;min-height:20px}
+.pfr{display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:left}
+.pfcache{border:2.5px solid #4a4a58;border-radius:12px;padding:10px;background:#fff}.pfcache .t{font-size:11px;color:#888;letter-spacing:.8px;margin-bottom:6px}
+.slots{display:flex;gap:5px}.slot{border:1.5px dashed #ccc;border-radius:8px;padding:4px;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:#bbb;transition:all .4s}
+.slot .kvv{opacity:0;display:flex;gap:3px;transition:opacity .4s}.slot.full{border:1.5px solid #6a6a6a;color:#555;background:#fafafa}.slot.full .kvv{opacity:1}
+.slot.hot{box-shadow:0 0 0 3px #f5d28a}.slot.read{box-shadow:0 0 0 3px #a9cbf3}
+.pfmask{border:1.5px solid #ddd;border-radius:10px;padding:8px 10px;font-size:11px;color:#888;line-height:1.35;transition:opacity .4s;height:208px;overflow:hidden}
+.pfmask table{border-collapse:separate;border-spacing:3px;margin-top:5px}.pfmask td{width:34px;height:22px;text-align:center;font-size:11px;border-radius:4px}
+.pfmask td.l{width:auto;color:#555;background:none;text-align:right;padding-right:4px;font-size:11px}.pfmask td.y{background:#a9cbf3;color:#335}.pfmask td.n{background:#eee;color:#bbb}
+.pfcap{grid-column:1/4;margin-top:16px;font-size:14px;color:#555;height:44px}
+
+.kvg{display:inline-flex;flex-direction:column;align-items:center}.kvg small{font-size:10px;font-weight:700;line-height:1.1;margin-top:1px}
+.lg{display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:11px;color:#666;letter-spacing:0;text-transform:none}
+.lg i{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a}
+.legend{margin:10px 0 0;font-size:12px;color:#666;text-align:center}
+.pfcache .t{display:flex;align-items:center}
+.slot .kvv{gap:4px}
+
+.ctrl a.pb{display:inline-block;min-width:84px;text-align:center}
+.pfig{min-height:330px}
+
+/* z -> next word figure */
+.lrow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:nowrap}
+.lcol{display:flex;flex-direction:column;align-items:center;gap:6px}.lcap{font-size:11px;color:#888;line-height:1.25;max-width:150px}
+.lyr{padding:18px 14px 10px;gap:2px}.lyr .bx{min-width:150px;font-size:12px;padding:7px 12px}
+.lmh{min-width:120px;font-size:12px;padding:8px 12px}
+.lturn{color:#bbb;font-size:20px;margin:6px 0}
+.ltbl{display:grid;grid-template-columns:48px 36px 64px 150px;gap:3px 6px;align-items:center;text-align:left;font-size:12px}
+.lh{font-size:10px;color:#999;font-weight:600}.lw{text-align:right;color:#333}.ll{color:#888;text-align:right}.la{color:#c0602a;font-size:11px;font-weight:600}
+.lb{display:flex;align-items:center;gap:6px}.lb i{display:block;height:12px;border:1px solid #888;border-radius:2px}.lb em{font-style:normal;color:#555;font-size:11px}
+
+/* animated q/k/v figure */
+.qgrid2{display:grid;grid-template-columns:96px repeat(3,128px) 92px 170px;gap:10px 14px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.qgrid2>*{transition:opacity .5s}
+.qnote{font-size:12px;font-weight:600;text-align:left;color:#555}
+.qnote[data-role=q]{color:#b0505a}.qnote[data-role=k],.qnote[data-role=v]{color:#2f8f4e}
+.qgrid2.final .cc[data-role=q],.qgrid2.final .rl[data-role=q]{opacity:.35}
+.qgrid2.final .cc[data-role=k],.qgrid2.final .cc[data-role=v]{outline:2px dashed #7fbf8f;outline-offset:2px;border-radius:4px}
+.qcap{margin-top:16px;font-size:14px;color:#555;height:44px}
+
+math{font-size:1.08em}math[display=block]{margin:12px 0}
+
+table td:nth-child(2),table th:nth-child(2){white-space:nowrap}
+
+
+/* decode figures: one shared column grid so every column lines up across rows */
+#fig-decode0 .drow,#fig-decode1 .drow{display:grid;grid-template-columns:96px 390px 30px 96px 30px 72px 88px;column-gap:3px;justify-content:center;align-items:center}
+#fig-decode0 .dtoks,#fig-decode1 .dtoks{display:grid;grid-template-columns:repeat(5,78px);gap:0;min-width:0;justify-content:start}
+#fig-decode0 .dtok,#fig-decode1 .dtok{width:78px;box-sizing:border-box;padding:4px 2px}
+#fig-decode0 .dlab,#fig-decode1 .dlab{width:auto;padding-right:8px;text-align:right}
+#fig-decode0 .mini2,#fig-decode1 .mini2{min-width:0;width:96px;box-sizing:border-box;padding:16px 4px 10px}
+#fig-decode0 .cnt,#fig-decode1 .cnt{min-width:0;width:88px}
+#fig-decode0 .span,#fig-decode1 .span{display:block}
+.dout{display:flex;justify-content:center}
+.static .fig{padding:28px 32px 28px}
+
+/* small DECODER tag so it no longer hides the top border of the box */
+.mini2 .dtag{font-size:10px;letter-spacing:.4px;left:12px;top:-8px;padding:0 4px;line-height:14px}
+.mini2{padding-top:18px}
+
+/* per-token price figure */
+.bill{display:flex;align-items:flex-start;justify-content:center;gap:12px}
+.bgrp{display:flex;flex-direction:column;align-items:center}
+.blab{font-size:12px;color:#888;margin-bottom:8px;height:16px}
+.brow2{display:flex;align-items:flex-start;gap:6px}
+.btc{display:flex;flex-direction:column;align-items:center;gap:6px}
+.bbar{width:40px;align-self:center;border:1px solid #6a6a6a;border-radius:4px;display:flex;align-items:flex-start;justify-content:center;font-size:11px;font-weight:700;color:#444;padding-top:1px;box-sizing:border-box}
+.bcap{margin-top:12px;font-size:12px;color:#555;background:#f4f4f4;border-radius:10px;padding:2px 10px}
+.bmid{display:flex;align-items:center;gap:6px;margin-top:20px;align-self:flex-start}
+.bmid .blackbox{padding:14px 16px;font-size:14px;min-width:150px;margin-top:0}
+.bmid .ar{margin-top:0}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+<style>
+body{font-family:Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;font-weight:300;line-height:1.6;color:#1f2328;background:#fbfaf7}
+.wrap{max-width:930px;padding:0 15px 80px}
+h1{font-size:32px;font-weight:300;line-height:1.2;margin:48px 0 20px;color:#1f2328}
+h2{font-size:21.6px;font-weight:400;line-height:1.3;margin:44px 0 12px;color:#1f2328}
+h3{font-size:17.6px;font-weight:500;line-height:1.4;margin:28px 0 8px;color:#1f2328}
+p,ul,ol{margin-bottom:16px}
+b,strong{font-weight:500}
+a{color:#1d4e89}
+table{font-size:14.4px}
+.cap{font-size:13.6px;color:#5f6670}
+.dtag{background:#fbfaf7}
+</style>
+</head>
+<body><div class="wrap">
+<h1>图解 KV Cache</h1>
+<p>打开任何一家大模型 API 的价格页，你都会看到两个现象：<b>输出的价格是输入的 3–5 倍</b>；同样是输入，<b>命中缓存的比没命中的便宜 10–50 倍</b>。这篇文章要把这两件事讲清楚。</p>
+<p>线索只有一个：自注意力里的 K 和 V。把它们存下来，就叫 KV Cache。我们沿用《图解 Transformer》的做法：先从外部把模型看成一个“输入 token → 输出 token”的接口，再一层一层拆开内部结构，把向量放进图里，最后回到账单。</p>
+<p>如果你还没读过<a href="https://jalammar.github.io/illustrated-transformer/">《图解 Transformer》</a>，建议先读一遍。不过没关系，后面会把我们需要的部分重讲一遍。</p>
+<h2 id="bill">价格页上，输出比输入贵好几倍</h2>
+<p>让我们先从外部看模型：你给它一段提示词（输入），它返回一段回答（输出）。API 按 token 计费，输入和输出分开算。</p>
+<div class="fig" data-fig="bill" id="fig-bill"></div><p class="cap">输入和输出分开计价：输出每个 token 的价格是输入的几倍。</p>
+<p>下面是三家官方价格页上几个主力模型的价格（每百万 token，2026-11-24 截取）。每一行左边是三个价格，右边是两个比值。</p>
+<div class="fig" data-fig="price" id="fig-price"></div><p class="cap">每一行是一个模型。左：输入（未命中）、缓存命中、输出的美元价；右：输出是输入的几倍，缓存命中比未命中便宜几倍。</p>
+<p>这就是两个现象：<b>输出价是输入价的 3–5 倍</b>；<b>缓存命中的输入，比没命中的便宜 10–50 倍</b>。我们一个一个来解释，先看看模型内部。</p>
+<h2 id="inside">打开模型，里面是一叠解码器</h2>
+<h3 id="decoder">Prefill 和 Decode 用的是同一叠解码器</h3>
+<p>和《图解 Transformer》里的原版不同，今天的大模型（GPT、Claude、DeepSeek 这一类）只保留解码器，叫 decoder-only。拆开模型内部，是一叠结构相同的解码器层。</p>
+<div class="fig" data-fig="openbox" id="fig-openbox"></div><p class="cap">整个模型 → 一叠解码器 → 每个解码器有两个子层。层数没有魔法，不同模型不一样。</p>
+<p>每个解码器分成两个子层。输入先流过<b>自注意力</b>层——这一层让模型在处理某个词时，去看看其他词；自注意力的输出再送进一个<b>前馈网络</b>。解码器里的自注意力是带遮罩的：每个词只能看自己和它左边的词，不能偷看右边。</p>
+<p>一次请求分成两个阶段。<b>Prefill（预填充）</b>：把你的整段提示词一次读完。<b>Decode（解码）</b>：然后一个 token 一个 token 地往外写。账单上的两个现象，就藏在这两个阶段的差别里。</p>
+<p><b>Prefill 不是 encoder。</b> 原版 Transformer 有 encoder 和 decoder 两部分（以翻译为例：encoder 把原文读完，decoder 再一个词一个词写出译文）。今天的 GPT、Claude、DeepSeek 这类模型只有 decoder，没有 encoder。Prefill 和 Decode 用的是<b>同一叠解码器、同一套权重</b>，只是两种运行方式：Prefill 把提示词里的所有词<b>一次性并行</b>送进去（带遮罩，每个词只看左边），顺便把每个词的 K、V 存下来，再产出第一个输出词；Decode 每次只送进<b>1 个</b>新词。所以它们是推理时的两个阶段，不是两个模块。</p>
+<div class="fig" data-fig="prefill" id="fig-prefill"></div><p class="cap">同一个 Decoder 的两种用法。Prefill：n 个词一次并行进入，所有词的 K、V 一次性写进 KV Cache，并产出第一个输出词；Decode：每次只进 1 个新词，读缓存，再追加自己的 K、V。上面的图会自动播放：先演示 Prefill，再接着演示 Decode。</p>
+<p><b>Prefill 的产物是什么？</b> 以提示词 <code>I love eating</code> 为例，Prefill 做完之后，留下两样东西：</p>
+<ol><li><b>KV Cache</b>：这 3 个词在每一层的 K 和 V。它们留在显存里，后面 Decode 的每一步都要读。这是主要产物。</li><li><b>第一个输出词</b>：模型在最后一个词 <code>eating</code> 的位置，算出“下一个词是什么”的概率（比如 <code>fresh</code> 0.62），从中选一个，就是第一个输出词。前两个位置其实也算出了预测，但提示词里它们的下一个词本来就是已知的（<code>I</code> 后面就是 <code>love</code>），所以用不上。</li></ol>
+<p>其他的都<b>扔掉</b>：每个词在各层里产生的中间结果，包括 Q。可以这样理解：K 和 V 是要留着以后查的“笔记”，Q 和中间结果是“草稿纸”，用完就扔。</p>
+<p>这带来两个直接的后果：提示词越长，Prefill 要处理的词越多，用户等第一个字出来的时间越长，同时留下的“笔记”也越多，KV Cache 越大。前缀缓存省钱，也是同一个道理：上次做好的“笔记”还在，这次提示词开头一样，就直接用，不用从头再做一遍 Prefill。</p>
+<h3 id="vectors">每个词先变成一个向量</h3>
+<p>现在看看向量是怎么在这些组件之间流动的。和所有 NLP 模型一样，我们先把每个词变成一个向量（嵌入）。</p>
+<div class="fig" data-fig="embed" id="fig-embed"></div><p class="cap">每个词变成一个向量。这里画成 4 个格子，真实模型是几千维。</p>
+<p>每个位置的词，沿着自己的路径流过解码器。注意这里的一个关键性质：<b>路径之间只在自注意力层有依赖</b>。前馈网络对每个位置独立地使用同一个网络，所以各条路径可以并行。</p>
+<div class="fig" data-fig="paths" id="fig-paths"></div><p class="cap">自注意力是各条路径交换信息的地方；前馈网络各走各的。</p>
+<p>这就是 Prefill 快的原因：提示词里所有词的路径，可以一起算。后面我们会回到这一点。</p>
+<h3 id="qkv">Q、K、V 是同一个向量乘出来的</h3>
+<p>计算自注意力的<b>第一步</b>，是从每个词的向量里造出三个向量：Query、Key 和 Value。它们由嵌入向量分别乘以三个训练好的矩阵得到。</p>
+<div class="fig" data-fig="qkv" id="fig-qkv"></div><p class="cap">x 乘上三个训练好的矩阵 W 得到 q、k、v。k、v 留进缓存，q 用完就丢。</p>
+<p><b>这三个矩阵 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi></mrow></math> 从哪来？</b> <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mi>Q</mi></msub></mrow></math>、<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mi>K</mi></msub></mrow></math>、<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mi>V</mi></msub></mrow></math> 是模型的<b>权重</b>，训练时学出来，训练完就固定了；推理时每个词都用同一套（每一层、每个头各有自己的一套）。公式很简单：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>q</mi><mo>&#x0003D;</mo><mi>x</mi><msub><mi>W</mi><mi>Q</mi></msub></mrow></math>，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi><mo>&#x0003D;</mo><mi>x</mi><msub><mi>W</mi><mi>K</mi></msub></mrow></math>，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>v</mi><mo>&#x0003D;</mo><mi>x</mi><msub><mi>W</mi><mi>V</mi></msub></mrow></math>，其中 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math> 是这个词在这一层的输入向量（第一层是 embedding，之后是上一层的输出）。因为是同一套 W，Prefill 才能把所有词一次性乘进去。同一个词在同一层的 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math> 和 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi></mrow></math> 都不会变，它算出的 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>k</mi></mrow></math>、<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>v</mi></mrow></math> 就永远一样，这正是 K、V 可以缓存的原因。</p>
+<p>它们是什么？是为了计算和理解注意力而造出来的抽象。用图书馆来比喻：<b>Q 是你手里的借书小纸条</b>（我现在想找什么），<b>K 是书架上的分类标签</b>，<b>V 是书本身</b>。</p>
+<p><b>第二步</b>是打分：拿当前词的 q，分别和每个词的 k 做点积。<b>第三步</b>是除以 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msqrt><mrow><mi>d</mi></mrow></msqrt></mrow></math> 再做 softmax，把分数变成加起来等于 1 的权重。<b>第四步</b>是用权重去乘各个词的 v。<b>第五步</b>是把它们加起来，得到当前词的输出 z。下面这张图会一步一步演示这五步。</p>
+<div class="fig" data-fig="attn" id="fig-attn"></div><p class="cap">当前词是 “eating”：它的 q 和 “I, love, eating” 的 k 打分，再按权重混合它们的 v。向量里的数字是演示值。</p>
+<p>写成一个式子，当前词的输出就是：</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>z</mi><mo>&#x0003D;</mo><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">x</mi></mrow><mspace width="negativethinmathspace" /><mrow><mo stretchy="true" fence="true" form="prefix">&#x00028;</mo><mfrac><mrow><mi>q</mi><msup><mi>K</mi><mrow><mo>&#x022A4;</mo></mrow></msup></mrow><mrow><msqrt><mrow><msub><mi>d</mi><mi>k</mi></msub></mrow></msqrt></mrow></mfrac><mo stretchy="true" fence="true" form="postfix">&#x00029;</mo></mrow><mi>V</mi></mrow></math></p>
+<p>其中 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>K</mi></mrow></math> 和 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>V</mi></mrow></math> 是所有可见词的 k、v 叠成的矩阵，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>d</mi><mi>k</mi></msub></mrow></math> 是 k 的维度。</p>
+<p>请注意图里 q 和 k、v 的区别：<b>q 只属于当前词，只在这一步用；k 和 v 属于每一个词，而且之后的每一步还会再用到它们。</b> 把这句话记住，KV Cache 的全部秘密就在里面。</p>
+<h3 id="next">下一个词是从 z 里挑出来的</h3>
+<p>我们算出了 z，可是模型最终要吐出的是<b>一个词</b>，z 到词中间还差几步。（这一节是通用原理，视频里没讲。）</p>
+<div class="fig" data-fig="logits" id="fig-logits"></div><p class="cap">从 z 到下一个词：多层之后得到向量 h，乘上词表矩阵得到每个词的分数，softmax 变成概率，再选出一个词。</p>
+<ol><li><b>多个头的 z 拼起来</b>，乘一个矩阵，再加上这一层的输入（残差连接）。</li><li><b>过前馈网络</b>，同样加上残差。这一层就算完了。</li><li><b>重复 N 层。</b> 上一层的输出是下一层的输入。最后一层给每个位置输出一个向量 h，长度和 embedding 一样。</li><li><b>h 乘上“词表矩阵”（LM head）</b>，得到词表里每个词一个分数，叫 logits：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>s</mi><mo>&#x0003D;</mo><mi>h</mi><mspace width="0.167em" /><msub><mi>W</mi><mrow><mtext>vocab</mtext></mrow></msub></mrow></math>。词表通常有几万到十几万个词。</li><li><b>softmax</b>：把分数变成加起来等于 1 的概率：<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>p</mi><mi>i</mi></msub><mo>&#x0003D;</mo><mstyle displaystyle="true" scriptlevel="0"><mfrac><mrow><msup><mi>e</mi><mrow><msub><mi>s</mi><mi>i</mi></msub></mrow></msup></mrow><mrow><msub><mo>&#x02211;</mo><mi>j</mi></msub><msup><mi>e</mi><mrow><msub><mi>s</mi><mi>j</mi></msub></mrow></msup></mrow></mfrac></mstyle></mrow></math>。</li><li><b>选词</b>：直接选概率最大的，或者用 Temperature、Top-P 在概率高的几个词里抽样。</li><li>选出的是词表里的编号，<b>再转回文字</b>，就是你看到的下一个字。</li></ol>
+<p>生成下一个词时，只用到<b>最后一个位置</b>的 h，其他位置的 h 这一步用不上。这也是为什么 Prefill 只用最后一个输入词的结果来出第一个输出词。</p>
+<p><b>z 是这个词的 embedding 吗？不是。</b> embedding 是按词编号查表得到的向量，只和这个词本身有关，<code>eating</code> 的 embedding 永远是同一个；z 是这个词<b>看过上下文之后</b>的向量，里面混进了前面词的 V，所以前面是 <code>I love</code> 还是别的词，它的 z 都会不同。还有一点容易混：位置 <code>eating</code> 最后算出的向量，预测的是它<b>后面</b>的词（<code>fresh</code>），不是在描述 <code>eating</code> 本身。</p>
+<p>上面的注意力图为了好懂，只画了一个头，也省略了残差和前馈。真实模型里，z 要经过这些步骤才变成这一层的输出。</p>
+<h2 id="decode">不缓存的话，每一步都在重算</h2>
+<h3 id="step">解码一次只能写出一个词</h3>
+<p>Prefill 结束后，模型得到第一个输出词。接下来进入 Decode：把这个新词接到末尾，再跑一遍，得到下一个词；再接上，再跑……直到输出结束符。</p>
+<div class="fig" data-fig="decode0" id="fig-decode0"></div><p class="cap">没有缓存：每一步都把前面所有词的 K、V 重新算一遍。橙色是 K，蓝色是 V。</p>
+<p>仔细看每一行里的 K、V 小格子。第 2 行要重新算 “I, love, eating” 的 K 和 V，第 3 行又要重新算一遍——而这些词的 K、V，和上一行算出来的一模一样。因为一个词的 K、V 只取决于它自己和它左边的词，左边没变，结果就不会变。</p>
+<p>没有缓存时，生成第 n 个词要重算前面 n 个词的 K、V；一共要算 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1</mn><mo>&#x0002B;</mo><mn>2</mn><mo>&#x0002B;</mo><mo>&#x02026;</mo><mo>&#x0002B;</mo><mi>n</mi><mo>&#x02248;</mo><msup><mi>n</mi><mn>2</mn></msup><mo>&#x0002F;</mo><mn>2</mn></mrow></math> 次（这里数的是算 K、V 的次数）。n 到了几千，这就是巨大的浪费。</p>
+<h3 id="store">把算过的 K、V 留下来</h3>
+<p>办法很朴素：第一次算出某个词的 K、V 之后，把它们存进显存。之后每一步，只需要算<b>新词</b>的 q、k、v；历史词的 K、V 直接从缓存里读。</p>
+<div class="fig" data-fig="decode1" id="fig-decode1"></div><p class="cap">有缓存：虚线的是从缓存里读的，只有新词的 K、V 需要计算。</p>
+<p>现在每一步只新算 1 个词的 K、V。<b>算 K、V 的总量</b>从约 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>n</mi><mn>2</mn></msup><mo>&#x0002F;</mo><mn>2</mn></mrow></math> 降到 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>——这是“用空间换时间”。注意缓存省的只是“重复计算 K、V”：注意力打分（新词的 q 和所有历史 K 做点积）每一步仍然要做，一步是 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">&#x00028;</mo><mi>n</mi><mo stretchy="false">&#x00029;</mo></mrow></math>。</p>
+<p>这也回答了一个常见的面试题：<b>为什么只缓存 K 和 V，不缓存 Q？</b> 因为 Q 只在当前这一步有用，算完就作废，下一步会有新的 Q。K 和 V 是历史，每一步都要翻。</p>
+<p>值得存下来的，是这一步算出来、后面每一步还会再用、而且不会再变的东西。</p>
+<p><b>K、V</b> 就属于这种。每个新词都要拿自己的 q 去和所有历史词的 K 打分，再混合所有历史词的 V。历史词的 K、V 只取决于它自己和它左边的词，左边没变，它们就不变。</p>
+<p><b>Q</b> 只属于当前这一步，下一步会有新的 Q，所以不存。<b>注意力分数、权重、输出 z</b> 都由当前词的 q 算出来，q 一变它们就变，所以每一步重算。</p>
+<p><b>缓存里到底存什么？</b> 存的是每一层、每个历史词的 <b>K 和 V</b>，不存 Q，也不存注意力的“结果”：</p>
+<table><thead><tr><th>东西</th><th>缓存吗</th><th>为什么</th></tr></thead><tbody><tr><td>K</td><td>缓存</td><td>每个新词都要拿自己的 q 和所有历史词的 K 打分。K 只取决于那个词自己和它左边的词，之后不会变</td></tr><tr><td>V</td><td>缓存</td><td>打完分后要用权重混合所有历史词的 V，V 同样不会变</td></tr><tr><td>Q</td><td>不缓存</td><td>只在当前这一步有用，下一步会有新的 Q</td></tr><tr><td>注意力分数和权重</td><td>不缓存</td><td>由当前词的 q 和历史的 K 算出来，每来一个新词 q 就变，所以要重算</td></tr><tr><td>输出 z</td><td>不缓存</td><td>是当前词的 q 的结果。后面的词不直接用旧词的输出，它们读的是旧词在每一层的 K 和 V</td></tr></tbody></table>
+<p>旧词的输出会变成下一层里它自己的 K、V，而这些在第一次算那一层时就已经存好了，所以缓存要<b>每一层都存一份</b>。这也是显存占用的来源。</p>
+<h3 id="price">输出贵，是因为解码要一步一步写</h3>
+<p>现在可以解释第一个现象了。（以下是原理推导，视频和价格页都没有直接这么说。）</p>
+<div class="fig" data-fig="timeline" id="fig-timeline"></div><p class="cap">Prefill 一次并行；Decode 一步一个词，每一步都要把权重和全部 KV 从显存搬一遍。</p>
+<p><b>Prefill</b>：提示词里的 n 个词一起过模型（还记得前馈网络各路径可以并行吗？），是大块的矩阵乘法，GPU 的算力被吃满。</p>
+<p><b>Decode</b>：每一步只产生 1 个词，必须等上一个词出来才能算下一个。可是每一步，都要把整个模型的权重和整段历史的 KV 从显存搬到计算单元，真正做的计算却很少——瓶颈从“算力”变成了“显存带宽”。</p>
+<p>所以输出是“一个一个算”：占用 GPU 的时间更长，也让一张卡同时能服务的请求更少。价格页上输出是输入的 3–5 倍，大致反映了这种差别（具体倍数是各家的定价决策）。</p>
+<h2 id="cost">缓存省了重复计算，显存却会涨上去</h2>
+<h3 id="grow">KV 随上下文和并发一起涨</h3>
+<p>KV Cache 不是免费的。模型权重的大小是固定的，而 KV 会随着<b>上下文长度</b>和<b>并发用户数</b>一起涨。拖动下面的滑块试试。</p>
+<div class="fig" data-fig="memory" id="fig-memory"></div><p class="cap">示意图：数值不是某个真实模型的，只表达“权重固定，KV 随长度和并发增长”。</p>
+<p>估算公式（通用）：</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mtext>KV&#x000A0;大小</mtext><mo>&#x02248;</mo><mn>2</mn><mo>&#x000D7;</mo><mi>L</mi><mo>&#x000D7;</mo><msub><mi>H</mi><mrow><mi>k</mi><mi>v</mi></mrow></msub><mo>&#x000D7;</mo><msub><mi>d</mi><mrow><mi>h</mi><mi>e</mi><mi>a</mi><mi>d</mi></mrow></msub><mo>&#x000D7;</mo><mi>n</mi><mo>&#x000D7;</mo><mi>B</mi><mo>&#x000D7;</mo><mi>b</mi></mrow></math></p>
+<p>其中 2 是 K 和 V 两份，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>L</mi></mrow></math> 是层数，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>H</mi><mrow><mi>k</mi><mi>v</mi></mrow></msub></mrow></math> 是 KV 头数，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>d</mi><mrow><mi>h</mi><mi>e</mi><mi>a</mi><mi>d</mi></mrow></msub></mrow></math> 是每个头的维度，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> 是序列长度，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>B</mi></mrow></math> 是并发数，<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi></mrow></math> 是每个数占的字节数。长文本或多人并发时，KV 占的显存可能远超模型权重本身，一张 80G 的卡很快就会 OOM，这就是常说的“显存墙”。</p>
+<p><b>KV Cache 这么占显存，那上下文是不是就不能很长了？</b> 不是“不能”，而是“很贵”。KV 的大小和上下文长度成正比，我们算一个具体的例子（以公开的 70B 级模型结构为例：80 层、8 个 KV 头、每头 128 维、16 位存储。这是我按结构自己算的，不是视频里的数字）：每个 token 的 KV 约是 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2</mn><mo>&#x000D7;</mo><mn>80</mn><mo>&#x000D7;</mo><mn>8</mn><mo>&#x000D7;</mo><mn>128</mn><mo>&#x000D7;</mo><mn>2</mn></mrow></math> 字节 ≈ <b>0.31 MB</b>；上下文 128K token，就是约 <b>40 GB</b>，而且这只是<b>一个用户</b>的量。同时服务 10 个用户，光 KV 就要约 400 GB，远远超过一张卡的显存。</p>
+<p>上下文长度受限，也不只是因为显存：Prefill 的注意力计算量大约是 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>O</mi><mo stretchy="false">&#x00028;</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false">&#x00029;</mo></mrow></math>，随长度的平方增长（每个词都要和左边所有词打分；Prefill 时还没有缓存可用，缓存也省不掉打分），越长首字越慢；模型训练时见过多长的上下文，也决定了它能稳定用多长；太长时模型还容易漏掉中间的信息。所以长上下文模型靠的不是“多放一点”，而是压缩 KV（见下一节）、对 KV 做量化，以及把暂时不用的 KV 挪到 CPU 内存或硬盘。</p>
+<p>于是整个行业都在想办法压缩它。vLLM 的 PagedAttention 像操作系统的虚拟内存一样给 KV 分页，减少碎片；更根本的办法，是让 KV 本身变小。</p>
+<h3 id="shrink">可以把每一份变薄，也可以把好几份并成一份</h3>
+<p>有两个方向：让<b>每一份</b> KV 变小，或者让<b>份数</b>变少。</p>
+<div class="fig" data-fig="compress" id="fig-compress"></div><p class="cap">示意图：同一行的宽度代表同样的 128 个 token；每个方块是存下来的一份 KV，越高表示每份越大，越宽表示合并了越多 token。</p>
+<ul><li><b>MHA</b>（Multi-Head Attention，传统多头注意力）：每个词、每个头都存一份 K 和 V。</li><li><b>MLA</b>（Multi-head Latent Attention，多头潜在注意力，DeepSeek V2/V3）：把 K、V 压进一个低维的 latent 向量，用的时候再展开。压的是每份的厚度，仍然是每个词一份。</li><li><b>CSA</b>（Compressed Sparse Attention，压缩稀疏注意力，DeepSeek V4）：每 4 个相邻的词合并成一份；再用一个索引器（可以理解成书的目录）给每份打分，只挑最相关的几份来算。</li><li><b>HCA</b>（Heavily Compressed Attention，重度压缩注意力，DeepSeek V4）：每 128 个词合并成一份，只留大意，像课程大纲。CSA 管细节，HCA 管全局，互相兜底。</li></ul>
+<p>视频里的数字：V4 Flash 的 KV Cache 只有 V3 的约 7%；V3 在 100 万 token 的上下文下大约需要 84GB 显存，差不多是一张顶配 H100。MLA 到了百万上下文就不够用了——因为它压的是“厚度”，而 100 万个词仍然是 100 万份。（以上数字来自 B 站视频，未对照技术报告。）</p>
+<h3 id="prefix">开头一样，就可以少算一遍</h3>
+<p>到目前为止，KV Cache 只在<b>一次请求内部</b>有效：回答一结束，显存里的笔记就被清掉了。可是 Agent 每一轮请求的开头，往往是同一份系统提示词和工具定义。</p>
+<p><b>前缀缓存（Prefix Caching）</b> 把公共前缀的 KV 留在共享缓存池里。下一个请求如果开头一样，就直接读，<b>跳过 Prefill</b>。这就是价格页上“缓存命中的输入”便宜的原因。首字延迟能从几秒降到几十毫秒。</p>
+<p>怎么在毫秒内找到能复用的前缀？推理引擎把文本切成固定大小的 token 块（比如每 16 个一块），给每块算哈希，串成一条哈希链，组织成一棵前缀树（radix tree）。100 个用户共用同一份 1 万 token 的系统提示，只存一份主干，每个人的问题是分出去的小枝条。显存紧张时，按 LRU 淘汰最久没人用的分支。</p>
+<div class="fig" data-fig="prefix" id="fig-prefix"></div><p class="cap">点下排的方块，表示“这一块变了”。从第一个不同的块开始，后面全部未命中（Hit = 命中，Miss = 未命中）。</p>
+<p>规则只有一条：<b>必须从第一个 token 开始逐字一致。</b> 开头只要变一个字，哈希链就从根部断了，后面哪怕有一万字完全相同，也全部要重新算。</p>
+<h3 id="practice">不变的放前面，会变的放后面</h3>
+<ol><li><b>静态内容放最前，动态内容放最后。</b> 系统提示词、工具定义、固定文档在前；用户提问、时间戳、会话 ID 在后。</li><li><b>别在提示词开头写时间、用户 ID、状态。</b> 这是最常见的“前缀污染”。</li><li><b>别在对话中途增删工具。</b> 工具列表变了，前缀就断了。</li><li><b>看命中情况再优化。</b> 看接口返回里的缓存命中 token 数（DeepSeek 是 <code>prompt_cache_hit_tokens</code>），数字稳定上涨，才说明吃到了缓存。</li><li><b>不同厂商机制不同。</b> Claude 需要在请求里加 <code>cache_control</code>（可以只加一个顶层字段，由系统自动管理断点），5 分钟缓存写入是 1.25 倍、1 小时写入是 2 倍输入价，命中读取 0.05–0.1 倍；OpenAI 价格页单列了缓存写入价（以 Sol 为例，30 分钟 1.25 倍，12 小时 2.5 倍）；DeepSeek 自动识别，不用改代码。</li></ol>
+<p>延伸阅读：<i>Manus上下文工程经验</i>（库内笔记）（KV-Cache 优化与 10 倍成本差异）。</p>
+<h3 id="deepseek">DeepSeek 把算好的 KV 存到硬盘上</h3>
+<p><b>自动命中。</b> 不用改代码，后台自动识别并缓存重复前缀。</p>
+<p><b>KV 落盘，不只放显存。</b> 把算好的 KV 转存到分布式 SSD 阵列：从硬盘读比从显存读稍慢，但换来海量容量和极低成本。有三个落盘时机：请求结束时（输入结束和输出结束各打包一个单元，多轮对话的第二轮就能命中第一轮）；公共前缀（不同问题只要共享长文档或系统提示，后台提炼出公共前缀单独存）；固定 token 间隔（超长上下文按固定步长切片）。</p>
+<p><b>把 KV 本身变小。</b> 从 V2/V3 的 MLA，到 V4 的 CSA + HCA（前面那张图）。KV 变小，既降低了显存压力，也降低了存储成本。</p>
+<p><b>结果体现在价格上。</b> 视频里说缓存命中便宜 30 倍，对应当时的价格；2026-11-24 的官方价格页上，V4 Flash 高峰价是 $0.006 对 $0.30，差 50 倍；V4 Pro 是 $0.044 对 $1.32，差 30 倍。一张卡能同时服务的请求更多，也是 V4 敢把默认上下文开到 100 万的底气。</p>
+<h2 id="kid">用接龙来理解这件事</h2>
+<ol><li><b>AI 写字像玩接龙，一次只能写 1 个字。</b> 读题是一眼全看完（想 1 次），写 6 个字却要想 6 次。想一次，电脑就忙一次，所以<b>写字比读题贵</b>。</li><li><b>每写一个字，都要回头把前面所有字看一遍。</b> 不然会写得前言不搭后语。可是每次都重读，太累了。</li><li><b>解决办法：做个笔记本。</b> 读过的重点记下来，下次直接翻笔记，只读新的那一个字。这个笔记本就叫 <b>KV Cache</b>。</li><li><b>笔记里只记 K 和 V，不记 Q。</b> 想象在图书馆：Q 是你的借书小纸条，借完就扔；K 是书架上的分类标签，V 是书。标签和书，下次还要用，所以留着。</li><li><b>笔记本会越来越厚，书桌（显存）却只有那么大。</b> 所以要把每页写得更精简（MLA），把相邻几个字合并成一条（CSA、HCA），放不下的搬到大仓库（硬盘）。</li><li><b>缓存为什么省钱？</b> 昨天的作业和今天的开头一模一样，就能直接抄笔记。但必须<b>从第一个词开始</b>一模一样：第一个词一变，后面就全部“不认识”，要重新读、重新花钱。所以<b>不变的放前面，会变的（比如时间）放最后</b>。</li></ol>
+<h2 id="recap">记住这几件事就够了</h2>
+<ul><li><b>输出比输入贵：</b> Decode 一步一个词，每步都要搬权重和 KV，瓶颈是显存带宽；Prefill 可以并行，算力吃满。</li><li><b>KV Cache：</b> K、V 属于每个词、之后每一步都要用，所以存起来；Q 只在当前步有用，所以不存。算 K、V 的总量从约 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>n</mi><mn>2</mn></msup><mo>&#x0002F;</mo><mn>2</mn></mrow></math> 降到 <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>。</li><li><b>代价是显存：</b> KV 随上下文长度和并发数增长，所以要压缩（GQA，Grouped-Query Attention，分组查询注意力；以及上一节的 MLA、CSA、HCA）和分页（PagedAttention，vLLM 提出的 KV 显存分页管理）。</li><li><b>前缀缓存</b>把 KV 跨请求复用，命中规则是从第一个 token 开始逐字一致，所以静态在前、动态在后。</li><li><b>DeepSeek：</b> 自动命中 + 硬盘缓存 + 更小的 KV，所以缓存命中价格低到 1/30–1/50。</li></ul>
+<h2 id="more">还可以从这些地方继续看</h2>
+<ul><li><a href="https://jalammar.github.io/illustrated-transformer/">《The Illustrated Transformer》</a> 和 <a href="https://jalammar.github.io/illustrated-gpt2/">《The Illustrated GPT-2》</a>：本文的版式和叙述方式都参考自这里。</li><li><a href="https://github.com/poloclub/transformer-explainer">Transformer Explainer</a>：在浏览器里交互地看 GPT-2 如何预测下一个词（Georgia Tech）。</li><li><a href="https://bbycroft.net/llm">LLM Visualization</a>：逐个矩阵乘法地走完一遍 Transformer 解码器。</li><li><a href="https://arxiv.org/abs/2601.04213">AnimatedLLM</a>：用交互动画讲解 LLM 的论文。</li><li><a href="https://huggingface.co/docs/transformers/v5.14.0/cache_explanation.md">Hugging Face 的 cache explanation 文档</a>：KV Cache 在代码里的样子。</li></ul>
+</div><script>const ICONS={"Claude": "data:image/png;base64,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", "OpenAI": "data:image/png;base64,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", "DeepSeek": "data:image/png;base64,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"};
+/* Figures in the visual language of "The Illustrated Transformer":
+   green = embedding x, purple = Query, orange = Key, blue = Value, pink = output z.
+   self-attention = peach box, feed-forward = light-blue box, decoder = pink outline. */
+const ROLE={x:'#b5e0a1',q:'#dcbef2',k:'#fcc990',v:'#a9cbf3',z:'#f6b2c8'};
+const TXT={x:'#6cc04a',q:'#b06fdc',k:'#f0a04b',v:'#5b9be0',z:'#e8789f'};
+const FIGS={};
+function el(tag,cls,html,st){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;if(st)Object.assign(e.style,st);return e}
+function vec(role,n=4,seed=1,sz=22){const v=el('span','vec');for(let i=0;i<n;i++){const c=el('i');c.style.background=ROLE[role];c.style.width=c.style.height=sz+'px';
+  c.style.boxShadow=`inset 0 0 0 60px rgba(255,255,255,${(0.42*Math.abs(Math.sin(seed*7.1+i*3.3))).toFixed(2)})`;v.appendChild(c)}return v}
+function chip(t,role,extra){const c=el('span','chip',t);c.style.background=ROLE[role]||'#fff';c.style.borderColor=role?'#6a6a6a':'#bbb';if(extra)Object.assign(c.style,extra);return c}
+const AV=(len=26)=>`<svg class="ar" width="12" height="${len}" viewBox="0 0 12 ${len}"><line x1="6" y1="${len}" x2="6" y2="7" stroke="#555" stroke-width="2"/><path d="M1 9 L6 0 L11 9 Z" fill="#555"/></svg>`;
+const AH=(len=34)=>`<svg class="ar" width="${len}" height="12" viewBox="0 0 ${len} 12"><line x1="0" y1="6" x2="${len-7}" y2="6" stroke="#555" stroke-width="2"/><path d="M${len-9} 1 L${len} 6 L${len-9} 11 Z" fill="#555"/></svg>`;
+const sub=(s)=>`<sub>${s}</sub>`;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const wrapOut=c=>{const d=el('div','dout');d.append(c);return d};
+function kvg(role,seed){const g=el('span','kvg');g.append(vec(role,2,seed,11),el('small','',role.toUpperCase()));g.lastChild.style.color=TXT[role];return g}
+function pauseBtn(r,ctrl){const a=el('a','pb','⏸ Pause');r._pa=a;a.onclick=()=>setPaused(r,!r._paused);ctrl.append(' · ',a)}
+function setPaused(r,v){r._paused=v;if(r._pa)r._pa.textContent=v?'▶ Resume':'⏸ Pause'}
+const unpause=r=>setPaused(r,false);
+async function psleep(r,ms){let t=0;while(t<ms){await sleep(50);if(!r._paused)t+=50}}
+
+/* 1 per-token price: input tokens are cheap, output tokens are expensive */
+FIGS.bill=(r)=>{
+  const tcol=(t,role,price,h,col)=>{const c=el('div','btc');c.append(chip(t,role));const bar=el('div','bbar',price);bar.style.height=h+'px';bar.style.background=col;c.append(bar);return c};
+  const group=(label,toks,role,price,h,col,cap)=>{const g=el('div','bgrp');g.append(el('div','blab',label));const row=el('div','brow2');toks.forEach(t=>row.append(tcol(t,role,price,h,col)));g.append(row,el('div','bcap',cap));return g};
+  const wrap=el('div','bill');
+  const inn=group('Input (prompt)',['Explain','KV','cache'],'x','1×',16,ROLE.v,'every input token: <b>1×</b> price');
+  const out=group('Output (response)',['The','cache','stores','…'],'z','≈4×',64,ROLE.z,'every output token: about <b>3–5×</b> price');
+  const mid=el('div','bmid');mid.append(el('span','',AH(26)),el('div','blackbox','Large language model<br><small>LLM</small>'),el('span','',AH(26)));
+  wrap.append(inn,mid,out);r.append(wrap)};
+
+/* 2 open the box */
+FIGS.openbox=(r)=>{
+  const row=el('div','flex mid');
+  row.append(el('div','blackbox small','LLM'),el('span','',AH(36)));
+  const stack=el('div','dec stack');stack.append(el('div','dtag','DECODER × N'));
+  for(let i=0;i<3;i++)stack.append(el('div','mini','Decoder'+(i==2?' ⋮':'')));row.append(stack,el('span','',AH(36)));
+  const one=el('div','dec');one.append(el('div','dtag','DECODER'));
+  one.append(el('div','',AV(22)),el('div','bx ff','Feed-Forward Network<br><small>per-position MLP</small>'),el('div','',AV(22)),el('div','bx sa','Masked Self-Attention<br><small>looks left only</small>'),el('div','',AV(22)));
+  row.append(one);r.append(row)};
+
+function vcell(role,label,n,seed,sz){const c=el('span','vcell');const l=el('b','vl',label);l.style.color=TXT[role]||'#888';c.append(l,vec(role,n,seed,sz));return c}
+/* 3 embeddings */
+FIGS.embed=(r)=>{const row=el('div','erow');
+  [['I',1],['love',2],['eating',3]].forEach(([t,i])=>{const c=el('div','ecol');c.append(vcell('x',`x${sub(i)}`,4,i),el('div','tok x',t));row.append(c)});r.append(row)};
+
+/* 4 paths */
+FIGS.paths=(r)=>{const g=el('div','paths');
+  const toks=['I','love','eating'];
+  const out=el('div','prow');toks.forEach((_,i)=>out.append(el('div','pc',AV(22))));
+  const ff=el('div','prow');toks.forEach(()=>ff.append(el('div','bx ff','Feed-Forward')));
+  const a1=el('div','prow');toks.forEach(()=>a1.append(el('div','pc',AV(22))));
+  const sa=el('div','bx sa wide','Self-Attention: paths exchange information here');
+  const a2=el('div','prow');toks.forEach(()=>a2.append(el('div','pc',AV(22))));
+  const xs=el('div','prow');toks.forEach((t,i)=>{const c=el('div','pc');c.append(vec('x',4,i+1),el('div','tok x',t));xs.append(c)});
+  g.append(out,ff,a1,sa,a2,xs);r.append(g)};
+
+/* 5 q k v (animated: where q, k, v come from, and what is kept) */
+FIGS.qkv=(r)=>{
+  const T=['I','love','eating'];const g=el('div','qgrid2');const cells=[];
+  const put=(node,step)=>{node.dataset.step=step;node.classList.add('hid');g.append(node);cells.push(node);return node};
+  const L=(t,step)=>put(el('div','rl',t),step);const none=(st)=>put(el('div',''),st);
+  L('Input',0);T.forEach(t=>put(el('div','cc',`<b class="lx big">${t}</b>`),0));none(0);none(0);
+  L('Embedding',1);T.forEach((t,i)=>{const c=el('div','cc');c.append(vcell('x',`x${sub(i+1)}`,4,i+1));put(c,1)});none(1);none(1);
+  const Wc=(role,l)=>{const w=el('div','wm');w.innerHTML=Array.from({length:9},()=>`<i style="background:#e6e6e6;border-color:${ROLE[role]}"></i>`).join('');const o=el('div','wcell');o.append(w,el('b','',l));o.lastChild.style.color=TXT[role];return o};
+  [['q','Queries','W<sub>Q</sub>','discarded after use ✕',3],['k','Keys','W<sub>K</sub>','kept in KV Cache ✓',4],['v','Values','W<sub>V</sub>','kept in KV Cache ✓',5]].forEach(([ro,name,w,note,st],k)=>{
+    const lab=L(name,st);lab.dataset.role=ro;
+    T.forEach((t,i)=>{const c=el('div','cc');c.append(vcell(ro,`${ro}${sub(i+1)}`,3,i+k*3+5));c.dataset.role=ro;put(c,st)});
+    put(Wc(ro,w),2);const n=put(el('div','qnote',note),6);n.dataset.role=ro});
+  const caps=['Start from the tokens.',
+   'Each token becomes a vector x: its embedding (in later layers: the previous layer’s output).',
+   'Three learned weight matrices W_Q, W_K, W_V. They are fixed at inference and shared by every token.',
+   'q = x · W_Q  —  the question this token asks.',
+   'k = x · W_K  —  the label other tokens use to find this one.',
+   'v = x · W_V  —  the content this token offers.',
+   'k and v are kept in the KV Cache. q is used for this step’s attention, then thrown away.'];
+  const cap=el('div','qcap');r.append(g,cap);
+  const ctrl=el('div','ctrl');const b1=el('a','','▶ Replay'),b2=el('a','','Next step'),b0=el('a','','Prev step');ctrl.append(b1);pauseBtn(r,ctrl);ctrl.append(' · ',b0,' · ',b2);r.append(ctrl);
+  let step=0,tm=null;
+  const render=(n)=>{step=n;cells.forEach(c=>c.classList.toggle('hid',+c.dataset.step>n));g.classList.toggle('final',n>=6);cap.textContent=caps[n]};
+  const play=()=>{unpause(r);clearInterval(tm);render(0);tm=setInterval(()=>{if(r._paused)return;if(step>=6){clearInterval(tm);return}render(step+1)},1200)};
+  b1.onclick=play;b2.onclick=()=>{setPaused(r,true);render(Math.min(6,step+1))};b0.onclick=()=>{setPaused(r,true);render(Math.max(0,step-1))};
+  r._f={play,final:()=>{clearInterval(tm);render(6)}};render(0)};
+
+/* 6 attention stepper */
+FIGS.attn=(r)=>{
+  const T=['I','love','eating'],S=[1.6,1.9,3.3],Wt=[.13,.17,.70];
+  const g=el('div','agrid');const rows=[];
+  const L=(t)=>el('div','rl',t);
+  const mk=(label,cells,extra)=>{const row=[L(label),...cells,extra||el('div','')];row.forEach(c=>{c.classList.add('hid');g.append(c)});rows.push(row)};
+  mk('Input',T.map(t=>el('div','cc',`<b class="lx big">${t}</b>`)));
+  mk('Embedding',T.map((t,i)=>{const c=el('div','cc');c.append(vcell('x',`x${sub(i+1)}`,4,i+1));return c}));
+  mk('Query',[el('div','cc ghost','current token only'),el('div','cc ghost','current token only'),(()=>{const c=el('div','cc');c.append(vcell('q',`q${sub(3)}`,3,13));return c})()]);
+  mk('Key',T.map((t,i)=>{const c=el('div','cc');c.append(vcell('k',`k${sub(i+1)}`,3,i+20));return c}));
+  mk('Value',T.map((t,i)=>{const c=el('div','cc');c.append(vcell('v',`v${sub(i+1)}`,3,i+30));return c}));
+  mk('Score q₃·kᵢ',S.map(s=>el('div','cc',`<span class="num">${s.toFixed(1)}</span>`)));
+  mk('÷√d → softmax',Wt.map(w=>el('div','cc',`<span class="num">${w.toFixed(2)}</span><div class="wb" style="width:${Math.round(w*110)}px"></div>`)));
+  mk('Weights × Value',T.map((t,i)=>{const c=el('div','cc');const vc=vcell('v',`×${Wt[i].toFixed(2)}`,3,i+30);vc.firstChild.style.color='#888';vc.lastChild.style.opacity=(0.25+0.75*Wt[i]).toFixed(2);c.append(vc);return c}));
+  mk('Sum → z₃',[el('div','cc'),el('div','cc'),(()=>{const c=el('div','cc');c.append(vcell('z',`z${sub(3)}`,3,41));return c})()]);
+  const note=el('div','anote hid','K and V are needed again at every later step → store them (KV Cache)');
+  const keep=el('div','keep hid');
+  r.append(g,note);r.style.position='relative';
+  let step=0;const show=(n)=>{step=n;rows.forEach((row,i)=>row.forEach(c=>c.classList.toggle('hid',i>=n)));
+    const f=n>=rows.length;note.classList.toggle('hid',!f);g.classList.toggle('hl',f)};
+  const ctrl=el('div','ctrl');const b1=el('a','','▶ Replay'),b2=el('a','','Next step'),b0=el('a','','Prev step');ctrl.append(b1);pauseBtn(r,ctrl);ctrl.append(' · ',b0,' · ',b2);r.append(ctrl);
+  let tm=null;const play=()=>{unpause(r);clearInterval(tm);show(0);tm=setInterval(()=>{if(r._paused)return;if(step>=rows.length+1){clearInterval(tm);return}show(step+1)},820)};
+  b1.onclick=play;b2.onclick=()=>{setPaused(r,true);show(Math.min(step+1,rows.length))};b0.onclick=()=>{setPaused(r,true);show(Math.max(0,step-1))};
+  r._f={play,final:()=>{clearInterval(tm);show(rows.length)}};show(0)};
+
+/* 7/8 decoding without / with cache */
+function decodeFig(r,cache){
+  const P=['I','love','eating'],O=['fresh','apples','.'];const rows=[];const wrap=el('div','drows');let total=0;
+  for(let i=0;i<3;i++){
+    const toks=P.concat(O.slice(0,i));const row=el('div','drow hid');
+    row.append(el('div','dlab',i==0?'Prefill<br><small>reads the prompt</small>':`Decode ${i}<br><small>writes output ${i+1}</small>`));
+    const tk=el('div','dtoks');let n=0;
+    toks.forEach((t,j)=>{const isNew=cache?(i==0||j==toks.length-1):true;if(isNew)n++;
+      const c=el('div','dtok'+(isNew?'':' cached'));c.append(chip(t,'x'));
+      const kv=el('div','kv');kv.append(kvg('k',j+1),kvg('v',j+3));c.append(kv);
+      c.append(el('div','ctag',isNew?'new':'cached'));tk.append(c)});
+    total+=n;row.append(tk,el('span','',AH(30)),el('div','dec mini2','<span class="dtag">DECODER</span>Decoder'),el('span','',AH(30)),wrapOut(chip(O[i],'z')),el('div','cnt',`K, V computed<br><b>${n}</b> ${n==1?'token':'tokens'}`));
+    rows.push(row);wrap.append(row)}
+  const sum=el('div','tot hid',`Total K, V computed over 3 steps: <b>${total}</b> tokens${cache?' (only new tokens)':' (every step recomputes all previous tokens)'}`);
+  const lgd=el('div','legend','<span class="lg"><i style="background:'+ROLE.k+'"></i>K (Key)</span><span class="lg"><i style="background:'+ROLE.v+'"></i>V (Value)</span>');
+  r.append(wrap,sum,lgd);
+  const ctrl=el('div','ctrl');const b=el('a','','▶ Replay');ctrl.append(b);pauseBtn(r,ctrl);r.append(ctrl);
+  let alive=0;const reset=()=>{rows.forEach(x=>x.classList.add('hid'));sum.classList.add('hid')};
+  const play=async()=>{unpause(r);const id=++alive;reset();for(let i=0;i<rows.length;i++){await psleep(r,i==0?220:980);if(id!=alive)return;rows[i].classList.remove('hid');rows[i].classList.add('pulse')}await psleep(r,680);if(id!=alive)return;sum.classList.remove('hid')};
+  b.onclick=play;r._f={play,final:()=>{alive++;rows.forEach(x=>x.classList.remove('hid'));sum.classList.remove('hid')}};reset()}
+FIGS.decode0=(r)=>decodeFig(r,false);FIGS.decode1=(r)=>decodeFig(r,true);
+
+/* 9 timeline */
+FIGS.timeline=(r)=>{
+  const g=el('div','tl');
+  const l1=el('div','lane hid');l1.append(el('div','ln','Prefill'),el('div','bar pf','3 tokens at once (parallel)<br><small>big matrix multiplies · compute-bound</small>'));
+  const l2=el('div','lane hid');l2.append(el('div','ln','Decode'));const seq=el('div','seq');
+  ['fresh','apples','.'].forEach(t=>seq.append(el('div','bar dc',`write “${t}”<br><small>moves all weights + KV</small>`)));l2.append(seq);
+  g.append(l1,l2,el('div','axis','time →'));r.append(g);
+  const ctrl=el('div','ctrl');const b=el('a','','▶ Replay');ctrl.append(b);pauseBtn(r,ctrl);r.append(ctrl);
+  let id=0;const play=async()=>{unpause(r);const k=++id;l1.classList.add('hid');l2.classList.add('hid');[...seq.children].forEach(x=>x.classList.add('hid'));await psleep(r,160);l1.classList.remove('hid');await psleep(r,900);if(k!=id)return;l2.classList.remove('hid');for(const x of seq.children){await psleep(r,680);if(k!=id)return;x.classList.remove('hid')}};
+  b.onclick=play;r._f={play,final:()=>{id++;l1.classList.remove('hid');l2.classList.remove('hid');[...seq.children].forEach(x=>x.classList.remove('hid'))}};r._f.final()};
+
+/* 10 memory */
+FIGS.memory=(r)=>{
+  const cap=100,W=30;const box=el('div','mem');
+  const bar=el('div','membar');const w=el('div','seg w','Model weights (fixed)'),kv=el('div','seg kv');bar.append(w,kv);
+  const info=el('div','meminfo');
+  const mk=(label,min,max,val,step)=>{const d=el('label','sl',`${label} <b></b> `);const i=el('input');i.type='range';i.min=min;i.max=max;i.value=val;i.step=step;d.append(i);return [d,i]};
+  const [d1,s1]=mk('Context length',1,128,8,1),[d2,s2]=mk('Concurrent users',1,64,4,1);
+  const upd=()=>{d1.querySelector('b').textContent=s1.value+'K';d2.querySelector('b').textContent=s2.value;
+    const used=+s1.value*+s2.value*0.08;const over=W+used>cap;
+    w.style.width=W+'%';kv.style.width=Math.min(used,cap-W)+'%';kv.textContent=over?'KV Cache (does not fit)':'KV Cache';kv.classList.toggle('over',over);
+    info.innerHTML=over?'<b style="color:#d94b4b">OOM: out of GPU memory</b>':`KV uses <b>${used.toFixed(1)}</b> of ${cap-W} units`};
+  s1.oninput=s2.oninput=upd;
+  const lab=el('div','memlab','GPU memory (illustrative: 100 units)');
+  box.append(lab,bar,info);r.append(box,el('div','sls'));r.lastChild.append(d1,d2);upd();
+  r._f={final:()=>{s1.value=64;s2.value=16;upd()},play:null}};
+
+/* 11 compression */
+FIGS.compress=(r)=>{
+  const M=[{n:'MHA',cnt:128,span:1,h:34,t:'one entry per token, thickest entries'},{n:'MLA（V2/V3）',cnt:128,span:1,h:12,t:'thinner entries, still one per token'},
+           {n:'CSA（V4）',cnt:32,span:4,h:12,t:'4 tokens merged into 1; an indexer picks only the relevant entries'},{n:'HCA（V4）',cnt:1,span:128,h:12,t:'128 tokens merged into 1; keeps only the gist'}];
+  const rows=[];
+  r.append(el('div','legend','<span class="lg"><i style="background:'+ROLE.k+'"></i>K (Key)</span><span class="lg"><i style="background:'+ROLE.v+'"></i>V (Value)</span>'));
+  M.forEach(m=>{const d=el('div','crow hid');const w=3,g=1,bw=m.span*(w+g)-g;
+    d.append(el('div','cl',`<b>${m.n}</b> · ${m.cnt} ${m.cnt==1?'entry':'entries'}<br><small>${m.t}</small>`));const bl=el('div','blocks');bl.style.gap='1px';
+    for(let i=0;i<m.cnt;i++){const b=el('span','kvb');b.style.width=bw+'px';b.style.height=m.h+'px';b.innerHTML=`<i style="background:${ROLE.k}"></i><i style="background:${ROLE.v}"></i>`;bl.append(b)}
+    d.append(bl);rows.push(d);r.append(d)});
+  const ctrl=el('div','ctrl');const b=el('a','','▶ Replay');ctrl.append(b);pauseBtn(r,ctrl);r.append(ctrl);
+  let id=0;const play=async()=>{unpause(r);const k=++id;rows.forEach(x=>x.classList.add('hid'));for(const x of rows){await psleep(r,450);if(k!=id)return;x.classList.remove('hid')}};
+  b.onclick=play;r._f={play,final:()=>{id++;rows.forEach(x=>x.classList.remove('hid'))}};r._f.final()};
+
+/* 12 prefix cache */
+FIGS.prefix=(r)=>{
+  const BASE=['System prompt','Tools','Documents','History','Question'];let order,chg;
+  const A=el('div','prow2'),B=el('div','prow2'),info=el('div','pinfo');
+  const ctrl=el('div','ctrl');
+  const set=(pos)=>{order=pos=='front'?['Timestamp',...BASE]:[...BASE,'Timestamp'];chg=pos=='none'?new Set():new Set(['Question','Timestamp']);draw()};
+  const draw=()=>{A.innerHTML='';B.innerHTML='';let first=order.findIndex(t=>chg.has(t));if(first<0)first=order.length;
+    order.forEach((t,i)=>{A.append(chip(t,'x'));const c=chip((chg.has(t)?'✎ ':'')+t,null,{background:i<first?ROLE.x:'#f7b9b9',borderColor:'#6a6a6a',cursor:'pointer'});c.onclick=()=>{chg.has(t)?chg.delete(t):chg.add(t);draw()};B.append(c)});
+    const hit=first,miss=order.length-first;info.innerHTML=`Hit <b>${hit}</b> blocks · Miss <b>${miss}</b> blocks · Relative cost <b>${Math.round((hit*.1+miss)/order.length*100)}%</b>`};
+  const bs=[['Timestamp first','front'],['Timestamp last','end'],['All identical','none']].map(([t,p])=>{const a=el('a','',t);a.onclick=()=>set(p);return a});
+  bs.forEach((a,i)=>{if(i)ctrl.append(' · ');ctrl.append(a)});
+  r.append(el('div','lab2','Request A (cached)'),A,el('div','lab2','Request B (click a block to toggle “changed”)'),B,info,ctrl);
+  set('end');r._f={play:null,final:()=>set('end')}};
+
+/* 13 unified price chart */
+FIGS.price=(r)=>{
+  const D=[['DeepSeek','V4 Flash (peak)','$0.30','$0.006','$1.20',4,50],['DeepSeek','V4 Pro (peak)','$1.32','$0.044','$3.96',3,30],
+           ['Claude','Sonnet 5.5','$2','$0.10','$10',5,20],['Claude','Opus 5.5','$4','$0.20','$20',5,20],['Claude','Haiku 5.5 (≤100K tokens)','$0.10','$0.01','$0.50',5,10],
+           ['OpenAI','GPT-6.2 Sol','$2','$0.10','$10',5,20],['OpenAI','GPT-6.2 Astra','$8','$0.40','$40',5,20]];
+  const g=el('div','pgrid');const dot=c=>`<span class="dot" style="background:${c}"></span>`;
+  ['','Input','Cache hit','Output','Output ÷ Input (×)','Cache hit is cheaper than miss by (×)'].forEach((t,i)=>{const h=el('div','ph'+(i>3?' wide':''),(i==1?dot(ROLE.v):i==2?dot(ROLE.x):i==3?dot(ROLE.z):'')+t);g.append(h)});
+  const bars=[];let last='';
+  D.forEach(([v,m,i,h,o,ra,rb])=>{const sep=v!=last?' sep':'';last=v;
+    g.append(el('div','pn'+sep,`<img class="vi" src="${ICONS[v]}" alt=""><span><small>${v}</small>${m}</span>`));
+    [[i,ROLE.v],[h,ROLE.x],[o,ROLE.z]].forEach(([t,c])=>{const p=el('div','pcell'+sep,t);p.style.background=c;g.append(p)});
+    const mkbar=(val,max,c)=>{const w=el('div','pbar'+sep);const b=el('i');b.style.background=c;b.dataset.w=val/max*72;w.append(b,el('b','',val+'×'));bars.push(b);return w};
+    g.append(mkbar(ra,5,ROLE.z),mkbar(rb,50,ROLE.x))});
+  r.append(g);
+  const ctrl=el('div','ctrl');const b=el('a','','▶ Replay');ctrl.append(b);r.append(ctrl);
+  const play=()=>{bars.forEach(x=>{x.style.transition='none';x.style.width='0'});setTimeout(()=>bars.forEach(x=>{x.style.transition='width .75s cubic-bezier(.2,.8,.2,1)';x.style.width=x.dataset.w+'%'}),60)};
+  b.onclick=play;r._f={play,final:()=>bars.forEach(x=>{x.style.transition='none';x.style.width=x.dataset.w+'%'})};r._f.final()};
+
+/* 14 prefill -> decode, same decoder */
+FIGS.prefill=(r)=>{
+  const P=['I','love','eating'],ALL=['I','love','eating','fresh'];
+  const root=el('div','pfig');const Lc=el('div','pfl'),mid=el('div','pfmid'),Rc=el('div','pfr');
+  const badge=el('div','pfbadge','PREFILL');
+  const outRow=el('div','pfout');const o1=chip('fresh','z'),o2=chip('apples','z');outRow.append(o1,o2);
+  const aOut=el('div','',AV(26));
+  const dec=el('div','dec pfdec');dec.append(el('div','dtag','DECODER'),el('div','','Masked self-attention + feed-forward<br><small>× N layers · the same weights in both phases</small>'));
+  const inRow=el('div','pfin');
+  const cols=ALL.map(t=>{const c=el('div','pfcol');c.append(el('div','',AV(24)),chip(t,'x'));inRow.append(c);return c});
+  Lc.append(badge,outRow,aOut,dec,inRow);
+  const cache=el('div','pfcache');cache.append(el('div','t','KV CACHE <span class="lg"><i style="background:'+ROLE.k+'"></i>K (Key)</span><span class="lg"><i style="background:'+ROLE.v+'"></i>V (Value)</span>'));const sl=el('div','slots');
+  const slots=ALL.map((t,i)=>{const s=el('div','slot');s.append(el('span','',t));const kv=el('div','kvv');kv.append(kvg('k',i+1),kvg('v',i+3));s.append(kv);sl.append(s);return s});
+  cache.append(sl);
+  const mask=el('div','pfmask');
+  Rc.append(cache,mask);
+  const cap=el('div','pfcap');
+  root.append(Lc,mid,Rc,cap);r.append(root);
+  const ctrl=el('div','ctrl');const b1=el('a','','▶ Replay'),b2=el('a','','Next step'),b0=el('a','','Prev step');ctrl.append(b1);pauseBtn(r,ctrl);ctrl.append(' · ',b0,' · ',b2);r.append(ctrl);
+  const caps=['The prompt arrives: 3 tokens, all known in advance.',
+   'All 3 tokens enter the decoder at the same time (parallel). Mask: each token sees only itself and the tokens to its left.',
+   'Every token’s K and V are written into the KV Cache.',
+   'The last position produces the first output token. Prefill is done.',
+   'Decode: only the newest token goes in. One token per step.',
+   'It reads the cached K and V instead of recomputing them.',
+   'It appends its own K and V, and outputs the next token. Repeat.'];
+  const drawMask=(d)=>{
+    if(!d){const T=P;let h='Attention mask<br>row = asking token · column = token it may look at<table><tr><td class="l"></td>'+T.map(t=>`<td class="l" style="text-align:center">${t}</td>`).join('')+'</tr>';
+      T.forEach((t,i)=>{h+=`<tr><td class="l">${t}</td>`+T.map((_,j)=>`<td class="${j<=i?'y':'n'}">${j<=i?'✓':'×'}</td>`).join('')+'</tr>'});mask.innerHTML=h+'</table>'}
+    else{mask.innerHTML='Attention mask (new token)<br>it may look at every token so far<table><tr><td class="l"></td>'+ALL.map(t=>`<td class="l" style="text-align:center">${t}</td>`).join('')+'</tr><tr><td class="l">fresh</td>'+ALL.map(()=>'<td class="y">✓</td>').join('')+'</tr></table>'}};
+  let step=0,tm=null;
+  const render=(n)=>{const d=n>=4;
+    badge.textContent=d?'DECODE':'PREFILL';badge.className='pfbadge'+(d?' d':'');
+    cols.forEach((c,i)=>{c.classList.toggle('hide',i<3?d:!d);c.classList.toggle('hot',(n==1&&i<3)||(n>=4&&i==3))});
+    dec.classList.toggle('hot',n==1||n==5);
+    o1.classList.toggle('hide',n<3);o2.classList.toggle('hide',n<6);aOut.classList.toggle('hide',n<3);
+    slots.forEach((s,i)=>{const full=i<3?n>=2:n>=6;s.classList.toggle('full',full);s.classList.toggle('hot',(i<3&&n==2)||(i==3&&n==6));s.classList.toggle('read',i<3&&n==5)});
+    mid.textContent=n==2?'write K, V ▶':n==5?'◀ read K, V':n==6?'write K, V ▶':'';
+    mask.classList.toggle('hide',n<1);if(n>=1)drawMask(d);
+    cap.textContent=caps[n]};
+  const play=()=>{unpause(r);clearInterval(tm);step=0;render(0);tm=setInterval(()=>{if(r._paused)return;if(step>=6){clearInterval(tm);return}step++;render(step)},1400)};
+  b1.onclick=play;b2.onclick=()=>{setPaused(r,true);step=Math.min(6,step+1);render(step)};b0.onclick=()=>{setPaused(r,true);step=Math.max(0,step-1);render(step)};
+  r._f={play,final:()=>{clearInterval(tm);step=3;render(3)}};render(0)};
+
+/* 15 from z to the next word */
+FIGS.logits=(r)=>{
+  const items=[];const hide=e=>{e.classList.add('hid');items.push(e);return e};
+  const col=(child,cap)=>{const c=el('div','lcol');c.append(child);if(cap)c.append(el('div','lcap',cap));return c};
+  const row1=el('div','lrow'),row2=el('div','lrow');
+  // row 1: z -> N layers -> h
+  const layers=el('div','dec lyr');layers.append(el('div','dtag','× N layers'),el('div','bx ff','Feed-Forward<br><small>+ residual</small>'),el('div','',AV(14)),el('div','bx sa','Concat heads · W_O<br><small>+ residual</small>'));
+  row1.append(hide(col(vcell('z','z',3,41),'attention output')),hide(el('span','',AH(28))),hide(layers),hide(el('span','',AH(28))),hide(col(vcell('z','h',3,43),'last-layer vector<br>(same size as embedding)')));
+  // row 2: h -> LM head -> logits/softmax/prob -> pick
+  const W=[['fresh',4.1,.62],['ripe',2.9,.19],['red',2.1,.09],['sweet',1.6,.05],['…','',.05]];
+  const tbl=el('div','ltbl');tbl.append(el('div','lh',''),el('div','lh','logit'),el('div','lh',''),el('div','lh','probability'));
+  W.forEach(([w,l,pr],i)=>{const b=el('i');b.style.background=ROLE.z;b.style.width=Math.round(pr*110)+'px';const hot=i==0;
+    const wd=el('div','lw',w);if(hot)wd.style.fontWeight='700';
+    tbl.append(wd,el('div','ll',l===''?'':l.toFixed(1)),el('div','la',i==2?'softmax →':''),el('div','lb'));tbl.lastChild.append(b,el('em','',pr.toFixed(2)))});
+  const head=el('div','bx lmh','LM head<br><small>linear: d → vocab size</small>');
+  row2.append(hide(col(vcell('z','h',3,43),'last position only')),hide(el('span','',AH(24))),hide(head),hide(el('span','',AH(24))),hide(col(tbl,'one score per vocabulary word<br>(illustrative numbers)')),hide(el('span','',AH(24))),hide(col(chip('fresh','z'),'pick: greedy / temperature / top-p')));
+  r.append(row1,el('div','lturn','↓'),row2);
+  const ctrl=el('div','ctrl');const b=el('a','','▶ Replay');ctrl.append(b);pauseBtn(r,ctrl);r.append(ctrl);
+  let id=0;const play=async()=>{unpause(r);const k=++id;items.forEach(x=>x.classList.add('hid'));for(const x of items){await psleep(r,480);if(k!=id)return;x.classList.remove('hid')}};
+  b.onclick=play;r._f={play,final:()=>{id++;items.forEach(x=>x.classList.remove('hid'))}};r._f.final()};
+
+/* boot */
+document.querySelectorAll('.fig[data-fig]').forEach(r=>{const f=FIGS[r.dataset.fig];if(f)f(r)});
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&!e.target._seen&&!window.FROZEN){e.target._seen=1;e.target._f&&e.target._f.play&&e.target._f.play()}}),{threshold:.45});
+document.querySelectorAll('.fig').forEach(r=>io.observe(r));
+window.renderFinal=()=>{window.FROZEN=true;document.body.classList.add('static');document.querySelectorAll('.fig').forEach(r=>r._f&&r._f.final&&r._f.final())};
+
+/* figure-only mode: ...html#only-<id> shows just that figure (used for per-figure embeds in notes) */
+(function(){const m=location.hash.match(/^#only-(\w+)/);if(!m)return;const id=m[1];
+  document.body.classList.add('only');
+  document.querySelectorAll('.wrap > *').forEach(e=>{if(e.id!=='fig-'+id)e.style.display='none'});
+  const f=document.getElementById('fig-'+id);if(f){f.style.margin='0 auto';f.style.padding='8px 0'}
+  document.querySelector('.wrap').style.padding='0';
+  setTimeout(()=>{f&&f._f&&f._f.play&&f._f.play()},250)})();
+
+</script></body></html>

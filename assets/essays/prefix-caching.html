@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>图解 Prefix Caching</title><style>*{box-sizing:border-box}
+body{margin:0;font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:#222;font-size:18px;line-height:1.5;background:#fff}
+.wrap{max-width:940px;margin:0 auto;padding:0 24px 80px}
+header.site{padding:28px 0 18px;border-bottom:1px solid #e6e6e6}
+header .t{font-size:30px;font-weight:300;color:#333}header .s{font-size:16px;color:#666}
+h1{font-size:28px;font-weight:700;margin:64px 0 22px;color:#222}
+h2{font-size:24px;font-weight:700;margin:58px 0 18px;color:#222}
+p{margin:0 0 17px}
+.meta{font-size:14px;color:#666;margin:7px 0}
+.upd{margin:30px 0 30px;padding-left:14px;border-left:4px solid #ddd;font-size:16px;color:#444}
+a{color:#4183c4;text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+code{font-family:"Bitstream Vera Sans Mono",Courier,monospace;color:#c7254e;background:#f9f2f4;padding:2px 4px;border-radius:4px;font-size:.88em}
+ul,ol{margin:0 0 17px;padding-left:26px}li{margin:6px 0}
+table{border-collapse:collapse;margin:22px auto;font-size:15px}th,td{border:1px solid #ddd;padding:7px 12px;text-align:left}th{background:#f7f7f7}
+.fig{margin:30px auto 4px;padding:14px 0 4px;text-align:center;position:relative}
+.fig.shot img{max-width:100%;border:1px solid #e3e3e3;border-radius:6px}
+.cap{font-size:14px;color:#999;text-align:center;margin:8px auto 30px;max-width:780px;line-height:1.45}
+.ctrl{font-size:13px;color:#aaa;margin-top:10px}
+/* shared figure parts */
+.flex{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.mid{align-items:center}
+.col{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lab,.lab2{font-size:13px;color:#888;margin:6px 0}
+.vec{display:inline-flex;border:1px solid #666;vertical-align:middle}
+.vec i{display:block;border-right:1px solid #666}.vec i:last-child{border-right:0}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:38px;padding:0 10px;border:2px solid #6a6a6a;border-radius:8px;margin:3px;font-size:17px;background:#fff;transition:background .3s}
+.tok{font-weight:700;font-size:18px;margin-top:4px}.tok.x{color:#6cc04a}
+.lx{color:#6cc04a}.big{font-size:20px}
+.tag.price{font-size:13px;background:#f4f4f4;border-radius:10px;padding:2px 10px;color:#555}
+.blackbox{background:#3a3a46;color:#fff;border-radius:14px;padding:22px 26px;font-size:17px;line-height:1.3}.blackbox.small{padding:12px 16px;font-size:14px}.blackbox small{color:#bbb}
+.ar{display:block;margin:0 auto}
+.bx{border:2.5px solid #4a4a58;border-radius:12px;padding:9px 20px;font-size:14px;color:#444;font-weight:600;line-height:1.3;min-width:150px}
+.bx small{font-weight:400;color:#888}.bx.sa{background:#fcefdf}.bx.ff{background:#e6eefb}.bx.wide{width:100%}
+.dec{border:2.5px solid #eba7c6;border-radius:16px;padding:16px 16px 8px;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:#fff}
+.dtag{position:absolute;top:-10px;left:14px;background:#fff;padding:0 6px;font-size:11px;letter-spacing:.6px;color:#e393b8}
+.dec.stack{gap:8px}.mini{border:2px solid #eba7c6;border-radius:10px;padding:6px 18px;font-size:13px;color:#777;background:#fdf1f6}
+/* paths */
+.paths{display:flex;flex-direction:column;align-items:center;gap:2px;max-width:560px;margin:0 auto}
+.prow{display:flex;gap:16px;justify-content:center;width:100%}.prow>div{flex:1;display:flex;flex-direction:column;align-items:center}
+.pc{align-items:center}
+/* qkv + attention grids */
+.qgrid,.agrid{display:grid;grid-template-columns:130px repeat(3,150px) 90px;gap:10px 8px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.rl{color:#666;font-size:15px;font-weight:600;text-align:right;padding-right:10px}
+.cc{display:flex;align-items:center;justify-content:center;gap:4px;min-height:34px;font-size:14px}
+.cc.ghost{color:#bbb;font-size:12px}.num{font-weight:700;font-size:16px;color:#555}.sm{font-size:12px;color:#888}
+.wm{display:grid;grid-template-columns:repeat(3,13px);gap:0;border:1px solid #bbb}.wm i{display:block;width:13px;height:13px;border:1px solid}
+.wcell{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.wb{height:6px;background:#dcbef2;border-radius:3px;margin-left:4px}
+.hid{opacity:0;visibility:hidden}
+.agrid>*{transition:opacity .6s}
+.anote{margin-top:16px;font-size:14px;color:#c0602a;font-weight:600;border:2px dashed #f0a04b;border-radius:10px;display:inline-block;padding:6px 14px;transition:opacity .6s}
+.agrid.hl .rl{}
+/* decoding */
+.drows{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+.drow{display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .7s;flex-wrap:nowrap}
+.dlab{width:84px;font-size:14px;font-weight:700;color:#555;text-align:right;line-height:1.25}.dlab small{font-weight:400;color:#999}
+.dtoks{display:flex;gap:2px;min-width:340px;justify-content:flex-start}
+.dtok{display:flex;flex-direction:column;align-items:center;padding:4px 3px;border-radius:8px;border:2px solid transparent}
+.dtok .kv{display:flex;gap:3px;margin-top:2px}
+.dtok.cached{opacity:.55;border:2px dashed #bbb;background:#fafafa}.dtok:not(.cached){border-color:#f5d28a;background:#fffaf0}
+.ctag{font-size:11px;color:#999;margin-top:2px}.dtok:not(.cached) .ctag{color:#d08a1a}
+.mini2{padding:16px 12px 10px;font-size:13px;color:#777;min-width:96px;background:#fdf1f6}.mini2 .dtag{position:absolute}
+.cnt{font-size:13px;color:#888;min-width:140px;text-align:left}.cnt b{font-size:18px;color:#c0602a}
+.pulse .dtok:not(.cached){animation:pl 1s ease}@keyframes pl{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.drow{transition:opacity .7s}.tot{margin-top:18px;font-size:16px;font-weight:600;color:#555;transition:opacity .6s}.tot b{font-size:24px;color:#c0602a}
+/* timeline */
+.tl{max-width:760px;margin:0 auto;text-align:left}
+.lane{display:flex;align-items:center;gap:14px;margin:12px 0;transition:opacity .5s}
+.ln{width:70px;font-weight:700;color:#555;text-align:right;font-size:15px}
+.bar{border:2px solid #4a4a58;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.3;text-align:center;transition:opacity .5s}.bar small{color:#777;font-size:12px}
+.bar.pf{background:#e6eefb;width:300px}.bar.dc{background:#fcefdf;width:150px}
+.seq{display:flex;gap:10px}.axis{text-align:right;color:#aaa;font-size:13px;border-top:2px solid #ccc;margin-top:14px;padding-top:4px}
+/* memory */
+.mem{max-width:720px;margin:0 auto}.memlab{font-size:13px;color:#888;margin-bottom:4px;text-align:left}
+.membar{display:flex;height:48px;border:2.5px solid #4a4a58;border-radius:10px;overflow:hidden;background:#fafafa}
+.seg{display:flex;align-items:center;justify-content:center;font-size:13px;white-space:nowrap;overflow:hidden;transition:width .2s}.seg.w{background:#e6e6ee}.seg.kv{background:linear-gradient(90deg,#fcc990 50%,#a9cbf3 50%);color:#333}.seg.kv.over{background:#f7b9b9}
+.meminfo{margin:10px 0;font-size:15px;color:#555;min-height:22px}
+.sls{display:flex;gap:30px;justify-content:center;flex-wrap:wrap}.sl{font-size:14px;color:#555}.sl input{vertical-align:middle;margin-left:8px;width:170px}
+/* compress */
+.crow{display:flex;align-items:flex-end;gap:14px;margin:18px auto;max-width:900px;text-align:left;transition:opacity .5s}
+.cl{width:150px;font-size:14px;line-height:1.3;flex:none}.cl small{color:#888}
+.blocks{display:flex;gap:2px;align-items:flex-end;flex-wrap:nowrap}
+.kvb{display:flex;flex-direction:column;border:1px solid #666;border-radius:2px;overflow:hidden}.kvb i{flex:1;display:block}
+/* prefix */
+.prow2{display:flex;justify-content:center;flex-wrap:wrap;margin:2px 0}.pinfo{margin:14px 0 4px;font-size:15px;color:#555}.pinfo b{font-size:20px;color:#c0602a}
+/* bars */
+.mb{max-width:720px;margin:16px auto;text-align:left}.brow{display:flex;align-items:center;margin:4px 0;font-size:13px}.bl{width:118px;color:#777;flex:none}
+.brow i{display:block;height:18px;border:1px solid #888;border-radius:3px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}.brow em{font-style:normal;margin-left:8px;color:#555}
+@media(max-width:760px){.qgrid,.agrid{grid-template-columns:90px repeat(3,100px) 60px;font-size:12px}.drow{flex-wrap:wrap}}
+
+/* unified price chart */
+.pgrid{display:grid;grid-template-columns:214px 80px 80px 80px 1fr 1.15fr;gap:7px 10px;align-items:center;max-width:900px;margin:0 auto;text-align:left;font-size:14px}
+.ph{font-size:12px;color:#777;font-weight:600;line-height:1.25}.ph.wide{padding-left:2px}
+.dot{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a;margin-right:5px;vertical-align:-1px}
+.pn{color:#333;font-weight:600}.pn small{display:block;color:#999;font-size:11px;font-weight:400;line-height:1.1}
+.pcell{border:1px solid #6a6a6a;border-radius:6px;padding:3px 0;text-align:center;font-size:13px;color:#333}
+.pbar{display:flex;align-items:center;gap:8px}.pbar i{display:block;height:16px;border:1px solid #6a6a6a;border-radius:3px;width:0}.pbar b{font-size:13px;color:#555}
+.sep{margin-top:6px}
+.pn{display:flex;align-items:center;gap:9px}.vi{width:26px;height:26px;border-radius:6px;flex:none}
+.static .ctrl{display:none}
+.pgrid{padding:0 6px}
+
+.vcell{position:relative;display:inline-flex;vertical-align:middle}
+.vl{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:7px;font-size:14px;white-space:nowrap}
+.erow{display:flex;justify-content:center;gap:90px}.ecol{display:flex;flex-direction:column;align-items:center;gap:8px;width:120px}
+.static .fig{padding:28px 44px 28px}
+
+.nowrap{flex-wrap:nowrap}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+#fig-bill .blackbox{padding:18px 18px;font-size:16px;min-width:150px}
+#fig-decode0 .chip,#fig-decode1 .chip{min-width:0;padding:0 7px;height:32px;font-size:15px;margin:2px}
+.dtoks{min-width:350px}.dlab{width:104px}.cnt{min-width:110px}
+.bar.dc{width:205px}
+.cl{width:215px}
+
+/* prefill figure */
+.pfig{display:grid;grid-template-columns:370px 104px 300px;gap:0 8px;align-items:center;max-width:820px;margin:0 auto;text-align:center}
+.pfl{display:flex;flex-direction:column;align-items:center;gap:6px}
+.pfbadge{align-self:flex-start;font-size:12px;letter-spacing:1px;font-weight:700;color:#fff;background:#6cc04a;border-radius:10px;padding:2px 12px;transition:background .3s}.pfbadge.d{background:#e8789f}
+.pfout{display:flex;gap:6px;min-height:44px;align-items:center}
+.pfdec{padding:20px 18px 12px;font-size:13px;color:#555;width:100%;transition:all .4s}.pfdec small{color:#999}.pfdec.hot{background:#fff6fa;box-shadow:0 0 0 4px #f7c9dc}
+.pfin{display:flex;gap:6px;justify-content:center;min-height:66px}
+.pfcol{display:flex;flex-direction:column;align-items:center;gap:2px;transition:opacity .4s}.pfcol.hot .chip{box-shadow:0 0 0 3px #f5d28a}
+.hide{opacity:0;visibility:hidden}
+.pfin .pfcol.hide{display:none}.pfout .chip{transition:opacity .4s}
+.pfmid{font-size:13px;color:#c0602a;font-weight:600;min-height:20px}
+.pfr{display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:left}
+.pfcache{border:2.5px solid #4a4a58;border-radius:12px;padding:10px;background:#fff}.pfcache .t{font-size:11px;color:#888;letter-spacing:.8px;margin-bottom:6px}
+.slots{display:flex;gap:5px}.slot{border:1.5px dashed #ccc;border-radius:8px;padding:4px;min-width:64px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:#bbb;transition:all .4s}
+.slot .kvv{opacity:0;display:flex;gap:3px;transition:opacity .4s}.slot.full{border:1.5px solid #6a6a6a;color:#555;background:#fafafa}.slot.full .kvv{opacity:1}
+.slot.hot{box-shadow:0 0 0 3px #f5d28a}.slot.read{box-shadow:0 0 0 3px #a9cbf3}
+.pfmask{border:1.5px solid #ddd;border-radius:10px;padding:8px 10px;font-size:11px;color:#888;line-height:1.35;transition:opacity .4s;height:208px;overflow:hidden}
+.pfmask table{border-collapse:separate;border-spacing:3px;margin-top:5px}.pfmask td{width:34px;height:22px;text-align:center;font-size:11px;border-radius:4px}
+.pfmask td.l{width:auto;color:#555;background:none;text-align:right;padding-right:4px;font-size:11px}.pfmask td.y{background:#a9cbf3;color:#335}.pfmask td.n{background:#eee;color:#bbb}
+.pfcap{grid-column:1/4;margin-top:16px;font-size:14px;color:#555;height:44px}
+
+.kvg{display:inline-flex;flex-direction:column;align-items:center}.kvg small{font-size:10px;font-weight:700;line-height:1.1;margin-top:1px}
+.lg{display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:11px;color:#666;letter-spacing:0;text-transform:none}
+.lg i{display:inline-block;width:10px;height:10px;border:1px solid #6a6a6a}
+.legend{margin:10px 0 0;font-size:12px;color:#666;text-align:center}
+.pfcache .t{display:flex;align-items:center}
+.slot .kvv{gap:4px}
+
+.ctrl a.pb{display:inline-block;min-width:84px;text-align:center}
+.pfig{min-height:330px}
+
+/* z -> next word figure */
+.lrow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:nowrap}
+.lcol{display:flex;flex-direction:column;align-items:center;gap:6px}.lcap{font-size:11px;color:#888;line-height:1.25;max-width:150px}
+.lyr{padding:18px 14px 10px;gap:2px}.lyr .bx{min-width:150px;font-size:12px;padding:7px 12px}
+.lmh{min-width:120px;font-size:12px;padding:8px 12px}
+.lturn{color:#bbb;font-size:20px;margin:6px 0}
+.ltbl{display:grid;grid-template-columns:48px 36px 64px 150px;gap:3px 6px;align-items:center;text-align:left;font-size:12px}
+.lh{font-size:10px;color:#999;font-weight:600}.lw{text-align:right;color:#333}.ll{color:#888;text-align:right}.la{color:#c0602a;font-size:11px;font-weight:600}
+.lb{display:flex;align-items:center;gap:6px}.lb i{display:block;height:12px;border:1px solid #888;border-radius:2px}.lb em{font-style:normal;color:#555;font-size:11px}
+
+/* animated q/k/v figure */
+.qgrid2{display:grid;grid-template-columns:96px repeat(3,128px) 92px 170px;gap:10px 14px;align-items:center;justify-content:center;margin:0 auto;text-align:center}
+.qgrid2>*{transition:opacity .5s}
+.qnote{font-size:12px;font-weight:600;text-align:left;color:#555}
+.qnote[data-role=q]{color:#b0505a}.qnote[data-role=k],.qnote[data-role=v]{color:#2f8f4e}
+.qgrid2.final .cc[data-role=q],.qgrid2.final .rl[data-role=q]{opacity:.35}
+.qgrid2.final .cc[data-role=k],.qgrid2.final .cc[data-role=v]{outline:2px dashed #7fbf8f;outline-offset:2px;border-radius:4px}
+.qcap{margin-top:16px;font-size:14px;color:#555;height:44px}
+
+math{font-size:1.08em}math[display=block]{margin:12px 0}
+
+table td:nth-child(2),table th:nth-child(2){white-space:nowrap}
+
+.callout{margin:0 0 17px}
+.callout .ct{font-weight:700;color:#222;margin-bottom:6px}.callout p{margin:0 0 17px}.callout ul{margin:0 0 17px}
+
+/* decode figures: one shared column grid so every column lines up across rows */
+#fig-decode0 .drow,#fig-decode1 .drow{display:grid;grid-template-columns:96px 390px 30px 96px 30px 72px 88px;column-gap:3px;justify-content:center;align-items:center}
+#fig-decode0 .dtoks,#fig-decode1 .dtoks{display:grid;grid-template-columns:repeat(5,78px);gap:0;min-width:0;justify-content:start}
+#fig-decode0 .dtok,#fig-decode1 .dtok{width:78px;box-sizing:border-box;padding:4px 2px}
+#fig-decode0 .dlab,#fig-decode1 .dlab{width:auto;padding-right:8px;text-align:right}
+#fig-decode0 .mini2,#fig-decode1 .mini2{min-width:0;width:96px;box-sizing:border-box;padding:16px 4px 10px}
+#fig-decode0 .cnt,#fig-decode1 .cnt{min-width:0;width:88px}
+#fig-decode0 .span,#fig-decode1 .span{display:block}
+.dout{display:flex;justify-content:center}
+.static .fig{padding:28px 32px 28px}
+
+/* small DECODER tag so it no longer hides the top border of the box */
+.mini2 .dtag{font-size:10px;letter-spacing:.4px;left:12px;top:-8px;padding:0 4px;line-height:14px}
+.mini2{padding-top:18px}
+
+/* per-token price figure */
+.bill{display:flex;align-items:flex-start;justify-content:center;gap:12px}
+.bgrp{display:flex;flex-direction:column;align-items:center}
+.blab{font-size:12px;color:#888;margin-bottom:8px;height:16px}
+.brow2{display:flex;align-items:flex-start;gap:6px}
+.btc{display:flex;flex-direction:column;align-items:center;gap:6px}
+.bbar{width:40px;align-self:center;border:1px solid #6a6a6a;border-radius:4px;display:flex;align-items:flex-start;justify-content:center;font-size:11px;font-weight:700;color:#444;padding-top:1px;box-sizing:border-box}
+.bcap{margin-top:12px;font-size:12px;color:#555;background:#f4f4f4;border-radius:10px;padding:2px 10px}
+.bmid{display:flex;align-items:center;gap:6px;margin-top:20px;align-self:flex-start}
+.bmid .blackbox{padding:14px 16px;font-size:14px;min-width:150px;margin-top:0}
+.bmid .ar{margin-top:0}
+#fig-bill .chip{min-width:0;padding:0 8px;font-size:15px;height:34px}
+
+/* ---- prefix-caching figures (px*) ---- */
+.pxtog{margin:2px 0 10px;font-size:14px}.pxtog a{display:inline-block;padding:3px 12px;margin:0 3px;border:1px solid #bbb;border-radius:14px;color:#555;cursor:pointer}.pxtog a.on{background:#444;color:#fff;border-color:#444}
+.pxgrid{display:inline-block;text-align:left}
+.pxrow{display:flex;align-items:center;margin:6px 0;transition:opacity .4s}
+.pxrl{width:34px;font-weight:bold;color:#666}
+.pxcs{display:flex;width:604px;flex:none}
+.pxblock{display:flex;flex-direction:column;align-items:center;justify-content:center;width:84px;height:46px;margin:0 3px 0 0;border:2px solid #777;border-radius:6px;font-size:14px;line-height:1.15;transition:background .3s}
+.pxblock small{font-size:11px;color:#555}
+.pxcnt{width:190px;white-space:nowrap;font-size:13px;color:#666;padding-left:10px}.pxcnt b{color:#c0602a;font-size:15px}
+.pxinfo{white-space:nowrap;margin:12px 0 4px;font-size:15px;color:#555;height:30px;line-height:30px}.pxinfo b{font-size:19px;color:#c0602a}
+.lg{display:inline-flex;align-items:center;margin-left:10px;font-size:12px;color:#777}.lg i{display:inline-block;width:12px;height:12px;border:1px solid #777;margin-right:4px}
+.pxcap{margin:12px auto 0;min-height:44px;max-width:700px;font-size:15px;color:#555;line-height:1.45}
+.pxcausal{display:flex;justify-content:center;gap:6px;margin:8px 0}
+.pxcc{display:flex;flex-direction:column;align-items:center;width:92px}
+.pxtok{display:flex;align-items:center;justify-content:center;width:88px;height:40px;border:2px solid #6a6a6a;border-radius:8px;background:#b5e0a1;font-size:16px;cursor:pointer}.pxtok.chg{background:#fff3c4;border-color:#d99a00}
+.pxkv{display:flex;gap:4px;justify-content:center;margin-top:8px;padding:6px 8px;border:1px solid #888;border-radius:6px;transition:background .3s}
+.pxst{margin-top:5px;font-size:12px;height:16px}
+.pxreq{margin:8px 0}.pxbs{display:flex;justify-content:center;gap:10px}
+.pxb{border:2px solid #777;border-radius:8px;padding:6px 8px 4px;min-width:150px;text-align:center;transition:background .3s}.pxb.tail{min-width:110px;border-style:dashed;background:#fafafa}
+.pxt{display:inline-block;margin:2px;padding:3px 7px;border:1px solid #777;border-radius:5px;background:#fff;font-size:14px}.pxt.chg{background:#fff3c4;border-color:#d99a00;cursor:pointer}.pxb .pxt{cursor:pointer}
+.pxh{font-size:12px;color:#555;margin-top:4px;font-family:Menlo,monospace}.pxh b{color:#222}
+.pxs{font-size:12px;font-weight:bold;height:16px;color:#555}
+.pxtr{display:flex;align-items:center;justify-content:center;margin:8px 0}
+.pxroot{width:46px;height:46px;border-radius:50%;border:2px solid #666;display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff}
+.pxhl{width:22px;height:2px;background:#666}.pxhl.short{width:16px}
+.pxtrunk{width:190px;padding:12px 8px;border:2px solid #6a6a6a;border-radius:8px;background:#b5e0a1;font-size:15px;line-height:1.3}.pxtrunk small{display:block;font-size:11px;color:#444;margin-top:4px}
+.pxbr{border-left:2px solid #666;padding:0}
+.pxleaf{position:relative;width:250px;height:44px;margin:4px 0 4px 16px;padding:2px 8px;border:2px solid #777;border-radius:8px;background:#fcc990;text-align:left;font-size:13px;line-height:1.2;cursor:pointer;display:flex;flex-direction:column;justify-content:center}
+.pxleaf::before{content:"";position:absolute;left:-18px;top:50%;width:16px;height:2px;background:#666}
+.pxleaf small{font-size:11px;color:#555}.pxleaf em{color:#c0392b;font-style:normal;font-weight:bold}
+.pxfl{display:flex;align-items:stretch;justify-content:center;margin:8px 0}
+.pxfb{width:104px;padding:8px 5px;border:2px solid #aaa;border-radius:8px;font-size:13px;line-height:1.25;display:flex;flex-direction:column;justify-content:center;color:#777;transition:all .3s}
+.pxfb small{font-size:11px;color:#aaa}.pxfb.done{background:#eef7e8;color:#555}.pxfb.on{background:#f5d28a;border-color:#6a6a6a;color:#222}
+.pxfa{display:flex;align-items:center;padding:0 3px}
+.pxdet{margin:12px auto 6px;max-width:700px;min-height:46px;font-size:15px;line-height:1.45;color:#333}
+.pxbar{display:flex;width:700px;margin:6px auto 0;height:26px;border:1px solid #777}.pxbar i{font-style:normal;font-size:12px;line-height:26px;text-align:center;overflow:hidden;white-space:nowrap}
+.pxbl{display:flex;justify-content:space-between;width:700px;margin:2px auto 0;font-size:12px;color:#777}
+.pxsl{width:420px;margin:6px 0 14px}.pxsll{font-size:15px;color:#555}.pxsll b{color:#c0602a}
+.pxcb{display:flex;align-items:center;width:700px;margin:8px auto}
+.pxcbn{width:150px;text-align:right;font-size:14px;color:#555;padding-right:10px}
+.pxcbt{flex:1;height:26px;background:#f1f1f1;border:1px solid #bbb}.pxcbt i{display:block;height:100%;transition:width .15s}
+.pxcbv{width:110px;text-align:left;padding-left:10px;font-size:15px}.pxcbv small{display:block;font-size:11px;color:#999}
+.pxnote{margin-top:4px;font-size:12px;color:#999}
+#fig-pxwaste{min-height:300px}
+
+pre{background:#f7f7f7;border:1px solid #e3e3e3;border-radius:6px;padding:12px 14px;font-size:13px;line-height:1.45;overflow-x:auto}pre code{background:none;color:#333;padding:0}
+.pxrq{font-size:14px;color:#555;text-align:left;display:inline-block;margin:0 0 6px;line-height:1.5;height:84px}
+.pxsvg{height:250px}.pxsvg svg{max-width:100%;height:auto;font-family:inherit}
+
+/* ---- pxbreak: breakpoint simulator ---- */
+.pxbk{max-width:920px;margin:0 auto;text-align:left;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;color:#2b2b30}
+.pxbk button{font-family:inherit}
+/* toolbar */
+.pxbk-tb{display:flex;align-items:center;flex-wrap:wrap;gap:10px 28px;padding:10px 14px;background:#f6f6f8;border:1px solid #e8e8ec;border-radius:12px}
+.pxbk-grp{display:flex;align-items:center;gap:10px}.pxbk-gl{font-size:12px;font-weight:600;color:#777;letter-spacing:.2px}
+.pxbk-seg2{display:inline-flex;background:#e9e9ee;border-radius:9px;padding:2px}
+.pxbk-seg2 button{border:0;background:none;padding:5px 12px;border-radius:7px;font-size:13px;color:#555;cursor:pointer}.pxbk-seg2 button.on{background:#fff;color:#111;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.pxbk-chip{border:1px solid #d4d4da;background:#fff;color:#666;border-radius:999px;padding:4px 13px;font-size:13px;cursor:pointer}.pxbk-chip.on{border-color:#16a34a;background:#f0fbf3;color:#15803d;font-weight:600}.pxbk-chip.dis{opacity:.5;cursor:default}
+.pxbk-grp .pxbk-chip+.pxbk-chip{margin-left:-4px}
+.pxbk-reset{margin-left:auto;border:1px solid #d4d4da;background:#fff;border-radius:999px;padding:4px 13px;font-size:13px;color:#666;cursor:pointer}.pxbk-reset:hover{background:#f0f0f3}
+.pxbk-help{margin:10px 2px 12px;font-size:13px;line-height:1.5;color:#999}.pxbk-help span.a{color:#2b2b30}.pxbk-help b{font-weight:600}
+/* plot card */
+.pxbk-plot{position:relative;background:#fff;border:1px solid #e8e8ec;border-radius:14px;padding:12px 22px 12px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 18px rgba(0,0,0,.05)}
+.pxbk-cap2{text-align:right;font-size:12px;color:#999;margin-bottom:-6px}
+.pxbk-min{position:absolute;top:34px;bottom:78px;border-left:1.5px dashed #777;z-index:3;pointer-events:none}.pxbk-min span{position:absolute;left:5px;top:-22px;font-size:11px;color:#666;white-space:nowrap;background:#fff;border:1px solid #e3e3e8;border-radius:6px;padding:0 6px}
+.pxbk-row{position:relative;margin:2px 0 10px}
+.pxbk-rh{display:flex;justify-content:space-between;align-items:baseline;margin:18px 0 0}.pxbk-rh b{font-size:15px;color:#222}.pxbk-rh span{font-size:13px;color:#888}
+.pxbk-tri{position:relative;height:26px}
+.pxbk-t{position:absolute;top:0;transform:translateX(-50%);border:0;background:none;font-size:19px;line-height:24px;padding:0 3px;cursor:pointer;color:#111;transition:transform .12s,color .12s}.pxbk-t.off{color:#c4c4c9;cursor:not-allowed}.pxbk-t.imp{color:#d97706;cursor:default}.pxbk-t:not(.off):not(.imp):hover{transform:translateX(-50%) scale(1.25);color:#c0602a}
+.pxbk-bar{position:relative;height:52px;border:1px solid #d9d9de;border-radius:10px;background:#fafafb}
+.pxbk-seg{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;line-height:1.25;color:#4a4a52;border-right:2px solid rgba(255,255,255,.95);overflow:hidden;white-space:nowrap}.pxbk-seg b{font-weight:600}.pxbk-seg small{font-size:10.5px;color:#7a7a83}
+.pxbk-seg:first-child{border-radius:9px 0 0 9px}
+.pxbk-hid{background:repeating-linear-gradient(135deg,#f7f7f8 0 7px,#eeeef0 7px 14px)}
+.pxbk-seg.chg{box-shadow:inset 0 0 0 2.5px #d97706}.pxbk-seg.chg::before{content:"≠ request 1";position:absolute;top:3px;left:6px;font-size:10px;color:#b45309;background:#fff7ed;border-radius:4px;padding:0 4px}
+.pxbk-tick{position:absolute;bottom:-1px;width:0;height:9px;border-left:1.5px solid #8a8a92;z-index:2}.pxbk-tick.hot{height:52px;border-left:2.5px solid #16a34a}
+.pxbk-ov{position:absolute;top:-3px;bottom:-3px;z-index:2;pointer-events:none;transition:left .28s cubic-bezier(.3,.7,.2,1),width .28s cubic-bezier(.3,.7,.2,1),opacity .2s}
+.pxbk-ov.hit{border:3px solid #16a34a;border-radius:11px;box-shadow:0 0 0 4px rgba(22,163,74,.12)}
+.pxbk-ov.miss{border:3px dashed #dc2626;border-radius:6px;background:repeating-linear-gradient(135deg,rgba(239,68,68,.09) 0 6px,rgba(239,68,68,.17) 6px 12px)}
+.pxbk-h{position:absolute;top:50%;transform:translate(-50%,-50%);width:12px;height:24px;padding:0;border:1px solid #c9c9cf;border-radius:7px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);color:#666;font-size:12px;line-height:22px;text-align:center;cursor:ew-resize;touch-action:none;z-index:4;opacity:.65;transition:opacity .15s}
+.pxbk-h::after{content:"";position:absolute;inset:-6px -9px}.pxbk-bar:hover .pxbk-h{opacity:.9}.pxbk-h:hover,.pxbk-h:active{opacity:1;border-color:#555;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.pxbk-wr{position:relative;height:7px;margin-top:5px}.pxbk-wr i{position:absolute;top:0;bottom:0;background:#f59e0b;border-radius:3px}
+.pxbk-ax{position:relative;height:20px;margin-top:4px;border-top:1px solid #d0d0d6}.pxbk-ax span{position:absolute;top:4px;transform:translateX(-50%);font-size:11px;color:#8a8a92}.pxbk-ax span:first-child{transform:none}.pxbk-ax span:last-child{transform:translateX(-100%)}
+.pxbk-lg{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;padding-top:10px;border-top:1px solid #f0f0f3;font-size:12px;color:#777}.pxbk-lg b{color:#222;font-size:13px}
+.pxbk-lg i{display:inline-block;width:11px;height:11px;border:1px solid #bbb;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.pxbk-lg i.pxbk-lc{width:20px;height:11px;border:2px solid #16a34a;border-radius:6px;background:#fff}.pxbk-lg i.pxbk-lu{width:20px;height:11px;border:2px dashed #dc2626;border-radius:3px;background:rgba(239,68,68,.12)}.pxbk-lg i.pxbk-lw{width:20px;height:5px;border:0;border-radius:2px;background:#f59e0b;vertical-align:1px}
+/* result card */
+.pxbk-res{margin-top:12px;padding:14px 18px;background:#f6f6f8;border:1px solid #e8e8ec;border-radius:12px}
+.pxbk-eq{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.pxbk-eq>span{font-size:18px;color:#999}
+.pxbk-bx{border:1px solid #dcdce2;border-radius:10px;padding:7px 14px;background:#fff}.pxbk-bx b{display:block;font-size:20px;line-height:1.2;color:#222}.pxbk-bx small{font-size:11.5px;color:#777}
+.pxbk-bx:last-of-type{border-color:#16a34a;background:#f0fbf3}.pxbk-bx:last-of-type b{color:#15803d}
+.pxbk-bx.zero{border-color:#dcdce2!important;background:#fff!important}.pxbk-bx.zero b{color:#222!important}
+.pxbk-msg{margin-top:10px;font-size:13.5px;line-height:1.5;color:#444}
+/* details */
+.pxbk-det{margin-top:12px;border:1px solid #e8e8ec;border-radius:10px;padding:8px 14px}.pxbk-det summary{cursor:pointer;font-size:13px;color:#555}
+.pxbk-pre small{display:block;margin:10px 0 2px;font-size:12px;color:#888}.pxbk-pre pre{margin:0;font-size:12px}
+.pxbk-note{margin-top:8px;font-size:12px;color:#999}
+.static .pxbk-help,.static .pxbk-cap2{display:none}
+
+/* pxbreak v4 additions */
+.pxbk-pw{position:relative}.pxbk-min{top:0!important;bottom:46px!important}.pxbk-min span{top:-2px!important;left:5px}
+.pxbk-mk{position:absolute;top:0;bottom:0;width:0;border-left:2px solid #2b2b30;z-index:3;pointer-events:none}.pxbk-mk.lg{border-left:1.5px solid #9a9aa2;top:auto;height:10px;bottom:0}.pxbk-mk.lg.hot{height:100%;border-left:2.5px solid #16a34a}.pxbk-mk.hot{border-left-color:#16a34a}
+.pxbk-mk i{position:absolute;top:-17px;left:-7px;font-style:normal;font-size:16px;line-height:16px;color:#d97706}.pxbk-mk i::before{content:"▼"}
+.pxbk-t.off{opacity:.4}
+.pxbk-t.on{cursor:ew-resize;touch-action:none;font-weight:700}
+.pxbk-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px}.pxbk-grid2 pre{max-height:340px;overflow:auto;font-size:11.5px}
+@media (max-width:640px){.pxbk-grid2{grid-template-columns:minmax(0,1fr)}}
+.pxbk-rd{font-size:11px;line-height:1.25;color:#777;text-align:center}
+.pxbk-bx.fin{border-color:#16a34a;background:#f0fbf3}.pxbk-bx.fin b{color:#15803d}
+.pxbk-eq{margin-bottom:8px}
+.pxbk-eq>span.pxbk-rd{font-size:11px;color:#777}
+.pxbk-lk{position:absolute;top:6px;bottom:6px;width:0;border-left:2px dotted #6b7280;z-index:3;pointer-events:auto}
+.pxbk-lg i.pxbk-lkk{width:0;height:12px;border:0;border-left:2px dotted #6b7280;border-radius:0;margin-right:7px;vertical-align:-2px}
+
+.pxbk-mk.un{border-left:2px dashed #9ca3af}.pxbk-mk.un i{color:#9ca3af}.pxbk-mk.hit{border-left-color:#16a34a}.pxbk-mk.hit i{color:#16a34a}.pxbk-mk.bey{border-left-color:#c4c4c9}
+.pxbk-t.un{color:#9ca3af}.pxbk-t.hit{color:#16a34a}.pxbk-t.bey{color:#c4c4c9}
+.pxbk-lg i.pxbk-lun{width:0;height:12px;border:0;border-left:2px dashed #9ca3af;border-radius:0;margin-right:7px;vertical-align:-2px}
+
+.pxbk-chk{margin-top:10px;padding-top:10px;border-top:1px solid #e3e3e8}.pxbk-ct{font-size:12px;font-weight:600;color:#777;margin-bottom:6px}.pxbk-cn{font-size:13px;color:#777}
+.pxbk-chk table{border-collapse:collapse;width:100%;font-size:13px}.pxbk-chk td{padding:4px 10px 4px 0;color:#555;border:0;vertical-align:top}.pxbk-chk td:first-child{white-space:nowrap}
+.pxbk-chk tr.ok td:last-child{color:#15803d;font-weight:600}.pxbk-chk tr.no td:last-child{color:#9ca3af}.pxbk-chk tr.also td:last-child{color:#555}
+.pxbk-chk th{font-size:11px;font-weight:600;color:#888;text-align:left;padding:0 10px 4px 0;border:0}.pxbk-chk td{line-height:1.4}
+
+.pxbk-rules{margin-top:10px;padding-top:10px;border-top:1px solid #e3e3e8;font-size:13px;color:#444}.pxbk-rules ul{margin:0 0 4px;padding-left:18px}.pxbk-rules li{margin:2px 0;line-height:1.45}
+.pxbk-lkc{display:inline-block;margin:3px 6px 3px 0;padding:3px 10px;border:1px solid #d8d8de;border-radius:999px;background:#fff;font-size:12px;color:#555}.pxbk-lkc b{color:#222}
+
+/* earlier models: checkpoint spacing, drawn like the guide: a line through the bar and a small triangle above */
+.pxbk-mk.lg{top:0;bottom:0;height:auto;border-left:1.5px solid #cfcfd6}.pxbk-mk.lg.hot{border-left:2.5px solid #16a34a}
+.pxbk-cp{position:absolute;top:6px;transform:translateX(-50%);font-size:11px;line-height:14px;color:#2b2b30}.pxbk-cp.hot{color:#16a34a;font-size:14px;top:3px}
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap">
+<style>
+body{font-family:Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:16px;font-weight:300;line-height:1.6;color:#1f2328;background:#fbfaf7}
+.wrap{max-width:930px;padding:0 15px 80px}
+h1{font-size:32px;font-weight:300;line-height:1.2;margin:48px 0 20px;color:#1f2328}
+h2{font-size:21.6px;font-weight:400;line-height:1.3;margin:44px 0 12px;color:#1f2328}
+h3{font-size:17.6px;font-weight:500;line-height:1.4;margin:28px 0 8px;color:#1f2328}
+p,ul,ol{margin-bottom:16px}
+b,strong{font-weight:500}
+a{color:#1d4e89}
+table{font-size:14.4px}
+.cap{font-size:13.6px;color:#5f6670}
+.dtag{background:#fbfaf7}
+</style>
+</head>
+<body><div class="wrap">
+<h1>图解 Prefix Caching（前缀缓存）</h1>
+<p>打开 Agent 的请求日志，你会发现一件奇怪的事：<b>每一轮请求的开头几乎一模一样</b>——同一份系统提示词、同一份工具定义、一路累积下来的对话历史。模型每次都老老实实把它们从头读一遍（Prefill），账单也每次都按“新输入”收钱。</p>
+<p>而价格页上，<b>命中缓存的输入比没命中的便宜 10–50 倍</b>。这篇文章要回答：模型凭什么敢说“这段我读过了”？它怎么在毫秒内找到上次读过的那一段？又有哪些写法会把缓存弄坏？</p>
+<p>这是《<i>图解 KV Cache</i>》的续篇。那一篇讲了 K、V 为什么可以存下来；这一篇讲<b>跨请求</b>把它们接着用。读过 KV Cache 那篇会更顺，没读过也没关系，需要的部分会再说一遍。</p>
+<h2>先看现象：Agent 每一轮都在重复劳动</h2>
+<p>让我们先从外部看。一个 Agent 会话里，用户问一句、模型答一句，下一轮请求要把<b>整段对话重新发一遍</b>。下图是三轮请求，每个方块是一段内容，方块下的数字是 token 数（演示值）。</p>
+<div class="fig" data-fig="pxwaste" id="fig-pxwaste"></div><p class="cap">三轮请求。点上方的开关切换“没有 / 有前缀缓存”，看右边“计算了多少 token”。绿色 = 命中缓存，粉色 = 需要 Prefill。</p>
+<p>注意：没有缓存时，三轮共要 Prefill 3,200 + 3,700 + 4,200 = <b>11,100</b> 个 token；有缓存时只要 3,200 + 500 + 500 = <b>4,200</b> 个。新增的内容其实只有 500 来个，剩下的都是在重算已经算过的东西。随着对话变长，这个差距还会越拉越大。</p>
+<p><b>前缀缓存（Prefix Caching）</b> 要做的事很朴素：把上一次 Prefill 算出的 K、V 留下来，下一个请求如果开头相同，就直接用，只算新增的部分。</p>
+<h2>为什么必须是“前缀”</h2>
+<p>为什么缓存只认<b>开头</b>一致，不能“中间有一段相同也行”？这是因为 K、V 不只取决于词本身，还取决于它<b>左边的所有词</b>。</p>
+<div class="callout"><div class="ct">为什么 K、V 只能按前缀复用？（原理推导）</div><p>判据：一个词在某一层的 K、V，是由“这个词和它左边的所有词”决定的。</p><ul><li>解码器的自注意力带遮罩：第 $i$ 个词只能看到第 1 到第 $i$ 个词，看不到右边。</li><li>第 1 层里，第 $i$ 个词的输出只依赖 $t_1,\dots,t_i$；第 2 层的输入就是第 1 层的输出，所以第 2 层里它仍然只依赖 $t_1,\dots,t_i$。一层层推下去，每一层都一样。</li><li>因此第 $i$ 个词的 K、V 可以写成 $K_i, V_i = f(t_1,\dots,t_i)$：只要这 $i$ 个词（连同它们的位置）不变，K、V 就<b>一字不差</b>，可以直接拿来用。</li><li>反过来：只要第 $j$ 个词变了，从 $j$ 往右的每一个词，它们依赖的“左边”都变了，K、V 全部作废。</li></ul></div>
+<div class="fig" data-fig="pxcausal" id="fig-pxcausal"></div><p class="cap">点任意一个词把它改掉：它和它右边的 K、V 全部要重算（粉色），左边的仍然可以复用（绿色）。</p>
+<p>这条规则决定了后面所有的事：缓存的匹配方式、提示词怎么写、为什么一个时间戳就能毁掉命中率。</p>
+<h2>怎么在毫秒内找到上次的前缀：分块 + 哈希链（vLLM 的办法）</h2>
+<p>最笨的办法是把新请求的 token 一个个和历史请求对比，太慢。这一节讲的是开源引擎 vLLM 的做法。分块来自它的 <a href="https://arxiv.org/abs/2309.06180">PagedAttention（Kwon et al., SOSP 2023）</a>，按哈希自动匹配前缀是 vLLM 在此之上做的 <a href="https://docs.vllm.ai/en/latest/design/prefix_caching/">Automatic Prefix Caching</a>。它把提示词切成<b>固定大小的块</b>（block；vLLM 里典型值是每块 16 个 token，下图为了画得下，一块只放 3 个），再给每一块算一个哈希。</p>
+<p>关键在于：每一块的哈希，<b>把前一块的哈希也算进去</b>（<a href="https://docs.vllm.ai/en/latest/design/prefix_caching/">vLLM 文档</a>的原话是：用块里的 token 和这一块之前的 token 来哈希）。这样第 $i$ 块的哈希就代表了“从开头到这一块”的整段前缀，而不只是这一块自己的内容。除了 token，哈希里还会带上 LoRA ID、多模态输入的哈希、cache salt 这类“让这一块独一无二”的额外信息，免得不同的东西撞在一起。</p>
+<p>$$h_i = H\big(h_{i-1},\ \text{tokens of block } i\big),\qquad h_0 = \varnothing$$</p>
+<div class="fig" data-fig="pxblocks" id="fig-pxblocks"></div><p class="cap">请求 A 已缓存。点请求 B 里的词把它改掉：这一块的哈希变了，后面所有块的哈希跟着变，即使后面的内容一字未改，也是 MISS。尾部不满一块的词不进缓存。</p>
+<p>vLLM 用一张“哈希 → 块”的哈希表加一条空闲块队列来管理，每个块有引用计数；<b>只缓存装满的块</b>。查缓存就是拿哈希去查表：B 的 $h_1$ 在不在表里？在，命中；$h_2$ 在不在？……直到第一个查不到的，后面就不用查了。这个过程是 $O(\text{块数})$ 的几次哈希表查询，所以是毫秒级。</p>
+<div class="callout"><div class="ct">为什么要分块，而不是按 token 缓存？</div><p>判据：管理成本和复用粒度之间的取舍。</p><ul><li>vLLM 选的是“块 + 哈希表”：元数据（哈希、引用计数）摊薄到每一块一份，查表是哈希表查询。SGLang 选的是另一条路：token 粒度（每页只放 1 个 token）加一棵前缀树，匹配更精细，但要维护一棵树。</li><li>显存本来就按块分页管理（vLLM 的 <a href="https://arxiv.org/abs/2309.06180">PagedAttention</a>），缓存块和显存块天然对齐，复用时不用拷贝，只是多一个指针指向同一块。</li><li>代价：尾部不满一块的 token 没有哈希，<b>不会被缓存</b>；而且命中长度永远是块大小的整数倍。</li></ul></div>
+<h2>把很多请求放进一棵前缀树（SGLang 的办法）</h2>
+<p>一个服务会同时收到成千上万个请求。它们之间有大量共同前缀：同一个产品的所有用户共用同一份系统提示词。如果每个请求各存一份，显存很快就爆了。</p>
+<p>SGLang 的办法叫 <b>RadixAttention</b>（<a href="https://arxiv.org/html/2312.07104v2">SGLang 论文</a>第 3 节，Zheng et al., 2023）：用一棵<b>前缀树（radix tree，基数树）</b>管理“token 序列 → 对应的 KV”，边上标的是一段 token 序列。共同的前缀只存一份“主干”，每个请求各自不同的部分是分出去的“枝条”。vLLM 没有用树，但效果相同：共同前缀的哈希一样，指向的就是同一批块，也只存一份。</p>
+<p><b>用一个小例子看这棵树。</b> 三个请求，每个词当一个 token：</p>
+<pre><code>A: You are helpful . Fix this bug
+B: You are helpful . Summarize the doc
+C: You are helpful . Fix this typo</code></pre>
+<p>它们的开头 <code>You are helpful .</code> 一样。树把没有分叉的一串 token 合成<b>一条边</b>，每条边上存着这段 token 对应的 KV：</p>
+<pre><code>root ──[You are helpful .]──○──[Fix this]──○──[bug]
+                            │              └──[typo]
+                            └──[Summarize the doc]</code></pre>
+<div class="fig" data-fig="pxradix" id="fig-pxradix"></div><p class="cap">点 Replay 或 Next step：先看三个请求，再看每个 token 一个节点的普通前缀树，再看压缩后的基数树，最后看新请求怎么把一条边劈成两半。</p>
+<p>公共的 <code>You are helpful .</code> 只有一份 KV，A、B、C 共用，这就是“主干只存一份”；各自不同的 <code>bug</code>、<code>typo</code>、<code>Summarize the doc</code> 是分出去的枝条。</p>
+<p><b>查缓存</b>就是从根出发，沿着边逐段比对，能比多长就命中多长。来了 <code>You are helpful . Fix this bug</code>，三段边全对上，整条命中。来了 <code>You are helpful . Fix that</code>，第一段对上；第二条边 <code>Fix this</code> 只有 <code>Fix</code> 对上，树就把这条边<b>劈成两半</b>：<code>Fix</code> 归公共部分，<code>this</code> 和 <code>that</code> 各成一根枝条。这就是 radix tree（基数树）和普通 trie（每个节点只放一个 token 的前缀树）的区别：没有分叉的一长串合并成一条边，有分叉时才劈开。</p>
+<p>vLLM 不用树：每一块有一个哈希，查的是哈希表。A、B、C 前几块的内容相同，哈希就相同，查到的是同一个块，所以也只存一份。区别只是：SGLang 靠树的结构找到共用的部分，vLLM 靠哈希相同找到共用的部分。</p>
+<p><b>所以前缀树和块哈希作用相同，都是为了找到已缓存的最长公共前缀，并让公共前缀只存一份；只是方法不同：</b></p>
+<table><thead><tr><th></th><th>前缀树（SGLang）</th><th>块哈希（vLLM）</th></tr></thead><tbody><tr><td>怎么识别“是同一段前缀”</td><td>沿着树从根往下，逐段比对 token</td><td>算出每块的哈希，去哈希表里查</td></tr><tr><td>结构</td><td>一棵树，边上存 token 序列和对应的 KV</td><td>一张“哈希 → 块”的表，不是树</td></tr><tr><td>粒度</td><td>每个 token</td><td>每一块（比如 16 个 token）</td></tr><tr><td>公共前缀只存一份靠什么</td><td>它们走的是树上的同一条边</td><td>它们算出的是同一个哈希，查到同一个块</td></tr><tr><td>淘汰</td><td>先淘汰最久没用的叶子</td><td>淘汰空闲队列里最久没用的块</td></tr></tbody></table>
+<p>块哈希也能起到前缀树的作用，是因为每块的哈希里带着前一块的哈希：“哈希相同”就等于“从开头到这一块都相同”，这本身就是前缀关系。哈希链隐含了一棵树，只是没有把它存成树的结构。</p>
+<p>真正的区别在两处：<b>匹配精度</b>（树按 token 匹配，命中长度可以是任意 token 数；vLLM 只缓存装满的块，命中长度是块大小的整数倍，尾部不满一块的要重算）和<b>实现成本</b>（哈希表查找简单；树更精细，但边被劈开时要修改结构）。对使用者来说，效果一样：开头一致就命中，开头不一致就未命中，所以“静态在前、动态在后”对两边都成立。</p>
+<div class="fig" data-fig="pxtree" id="fig-pxtree"></div><p class="cap">100 个用户共用一份 1 万 token 的系统提示，只存一份主干（绿色），每个人的问题是一根小枝条（橙色）。点“+ New request”加用户，点一个枝条表示它刚被用过，点“Evict LRU leaf”淘汰最久没人用的枝条。</p>
+<p><b>显存满了怎么办？</b> 两家都按 <b>LRU（Least Recently Used，最近最少使用）</b> 淘汰，但细节不同：</p>
+<ul><li><b>SGLang：</b> 先淘汰最久没用的<b>叶子</b>，叶子删掉后它的父节点变成新的叶子，再按顺序淘汰，所以公共主干最后才会被动。每个节点有引用计数，有正在运行的请求用着（计数不为 0）就不能淘汰；缓存和运行中的请求共用同一块显存池。</li><li><b>vLLM：</b> 没人用的块（引用计数归零）进空闲队列，队首是最久没用的，显存紧张时从队首淘汰。一个请求结束时，它的块是按<b>倒序</b>放回队尾的：越靠后的块依赖的前缀越长、越不容易被别人复用，所以先淘汰。</li></ul>
+<p>无论哪种，热门主干因为不断被新请求用到，都最不容易被淘汰。</p>
+<p>至于 OpenAI、Anthropic、DeepSeek 内部怎么实现，官方文档没公开，只说明了外部行为（前缀匹配、整段一致）。上面是开源引擎的做法，闭源服务大概率思路类似（推测），但别把它们当成这些服务的实现。</p>
+<h2>一次请求的完整流程</h2>
+<p>把前面几块拼起来，引擎处理一个带缓存的请求，大致是这六步。下图按 vLLM 的块哈希方式画；SGLang 是在树上找最长前缀，其余步骤一样。</p>
+<div class="fig" data-fig="pxflow" id="fig-pxflow"></div><p class="cap">以一个 10,050 token 的提示为例（块大小 16）：625 块命中，只需要 Prefill 剩下的 50 个 token。</p>
+<p>注意第 4 步：未命中的“尾巴”仍然要做 Prefill，但它的注意力计算会<b>读取</b>已缓存的 10,000 个词的 K、V，就像这些 K、V 是刚刚算出来的一样。命中的部分省掉的是<b>重新计算 K、V（以及它们前面所有层的前向计算）</b>，而不是整个注意力的读取。</p>
+<p>还有一点：第 6 步把新块登记进缓存，包括这一次<b>生成</b>出来的部分。所以多轮对话里，第 2 轮不仅能命中第 1 轮的提示，通常还能命中第 1 轮的回答（它在第 2 轮里已经变成了输入）。</p>
+<h2>命中规则只有一条：从第一个 token 开始逐字一致</h2>
+<p>由于哈希链的缘故，缓存命中是“从头开始的最长公共前缀”。<b>开头只要变一个字，哈希链从根部就断了，后面哪怕有一万字完全相同，也全部未命中。</b></p>
+<div class="fig" data-fig="prefix" id="fig-prefix"></div><p class="cap">每个方块是一块内容。点下排的方块表示“这一块变了”。切换 “Timestamp first / last” 看看，同样多的内容，时间戳放在开头还是结尾，命中率差多少。</p>
+<p>这就是“<b>前缀污染</b>”：在提示词最前面写了会变的东西，比如当前时间、用户 ID、会话状态、随机数。下面是几个常见的坑：</p>
+<table><thead><tr><th>写法</th><th>结果</th><th>改法</th></tr></thead><tbody><tr><td>系统提示词开头写 <code>Current time: 2026-11-24 14:03:21</code></td><td>每次请求开头都不同，整条缓存失效</td><td>时间放到最后一条用户消息里</td></tr><tr><td>对话中途增删工具定义</td><td>工具列表在前缀里，改一个工具，后面全断</td><td>工具列表固定，用“是否启用”的字段控制</td></tr><tr><td>JSON 序列化时键的顺序不稳定</td><td>同样的内容，字节不同，哈希不同</td><td>固定键顺序（排序序列化）</td></tr><tr><td>把历史消息“压缩改写”</td><td>中间一块变了，之后全部未命中</td><td>只在末尾追加；必须压缩时，接受一次失效</td></tr><tr><td>静态文档放在用户问题之后</td><td>每个问题都把文档挤到不同位置</td><td>文档在前、问题在后</td></tr></tbody></table>
+<p><b>动态选工具（每轮只给模型一部分工具）一定更快吗？不一定。</b> 它是拿“少算一点”换“缓存失效”：</p>
+<table><thead><tr><th></th><th>固定完整工具表</th><th>动态选工具</th></tr></thead><tbody><tr><td>工具部分的 token</td><td>多（比如 5,000）</td><td>少（比如 1,000）</td></tr><tr><td>缓存</td><td>工具和系统提示都能命中</td><td>工具表一变，前缀从开头起全部未命中</td></tr><tr><td>每轮要 Prefill 的 token</td><td>只算新增部分，很少</td><td>整个前缀都要重算（比如约 4,000 个 token）</td></tr></tbody></table>
+<p>举个例子：系统提示加工具共 8,000 token，其中工具 5,000。固定工具表时，命中后每轮只算新增的几百个 token；动态选工具时，工具虽然只剩 1,000，但每轮要重新 Prefill 整个 4,000 左右的前缀，反而更慢，输入费用也更高。只有工具表特别大（成百上千个）、而且缓存本来也命中不了（比如请求间隔太长缓存过期）时，少发工具才可能赢。（原理推导，数字是演示值）</p>
+<p><b>不想让模型用某些工具时，别删，要“遮住”。</b> <i>Manus上下文工程经验</i>（原文：<a href="https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus">Manus 的博客</a>）的做法是：提示词里的工具表一个字都不改，前缀不变，缓存照常命中；在模型生成输出的那一步限制它：模型每一步会给每个可能的下一个 token 打分（logits），把不该选的工具对应的分压到极低，概率接近 0，模型就选不到它。类比：菜单照常印着所有菜，但点菜时把不能点的几道捂住。注意：库里那页笔记里的 <code>logit_bias</code> 是示意代码，博客原文并没有提 <code>logit_bias</code>，只说“直接屏蔽 token 的 logits”，具体怎么做见下面；托管 API 能不能这样做取决于接口。Anthropic 文档写明改 <code>tool_choice</code> 只会让 messages 部分的缓存失效，tools 和 system 仍然命中，所以“用 <code>tool_choice</code> 限制选择”比“改工具表”便宜得多（其他厂商我没核实）。</p>
+<p><b>Manus 具体怎么做（出自<a href="https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus">博客</a>“Mask, Don't Remove”一节）：</b> 它先说明为什么不删：工具定义在上下文最前面，改一次，后面所有内容的缓存都失效；而且历史里的动作还引用着被删掉的工具，模型会困惑，容易出现格式错误或编造动作。做法有三件事：</p>
+<ol><li><b>状态机：</b> 根据当前状态决定这一步允许用哪些工具。博客的例子：用户刚发来新消息时，必须马上回复，不能先去调工具。</li><li><b>响应预填（response prefill）：</b> 在模型开口之前，先替它写好回复的开头，模型只能接着往下写。Hermes 格式的三档：<b>Auto</b> 只预填 <code>&lt;|im_start|&gt;assistant</code>，模型自己决定调不调工具；<b>Required</b> 预填到 <code>&lt;tool_call&gt;</code>，必须调工具，调哪个不限；<b>Specified</b> 预填到 <code>&lt;tool_call&gt;{"name": "browser_</code>，必须调工具，而且只能是名字以 <code>browser_</code> 开头的那几个。</li><li><b>工具名统一前缀：</b> 浏览器类都以 <code>browser_</code> 开头，命令行类都以 <code>shell_</code> 开头。预填一个前缀，就能把选择限制在一组工具里。</li></ol>
+<p>串起来看：工具表里固定放着 <code>browser_open</code>、<code>browser_click</code>、<code>shell_ls</code>、<code>shell_run</code> 四个，永远不变。当前状态是“正在浏览网页”，就预填 <code>{"name": "browser_</code>，模型只能补成 <code>browser_open</code> 或 <code>browser_click</code>；<code>shell_</code> 的两个仍然在表里，但这一步选不到。工具表和系统提示都没变，缓存照常命中。博客没有给出状态机或屏蔽的具体代码，预填在各家 API 里是否可用，我没核实。</p>
+<h2>省多少：延迟和成本</h2>
+<p>命中的部分不再做 Prefill，所以它同时省两样东西：<b>首字延迟</b>（用户等第一个字的时间）和<b>输入价格</b>。</p>
+<div class="fig" data-fig="pxcost" id="fig-pxcost"></div><p class="cap">选一个提示长度，拖动命中率。时间按“每秒 Prefill 5,000 个 token”估算，成本按命中价 = 未命中价的 1/10 估算，都是演示值。</p>
+<p>一个算例：32,000 token 的提示，命中 90%。要计算的 token 从 32,000 降到 3,200，首字延迟从 6.4 秒降到 0.64 秒；输入成本是 $0.1 + 0.9 \times 0.1 = 0.19$ 倍，约等于打了两折。命中率 100% 时延迟和成本都不会降到 0，因为命中的块仍然要付读取费用，而且最后几个 token 总是要算的。</p>
+<p>需要说明的是：Prefill 的计算量并不严格和 token 数成正比（注意力部分和长度的平方有关），所以真实长上下文里，省下的时间比例通常比图里更大。图里只用了最简单的线性假设。（原理推导）</p>
+<p><b>首字延迟（TTFT，Time To First Token）由什么决定？</b> 大致是：<b>TTFT ≈ 排队等待 + 未命中部分的 Prefill 时间 + 第一步解码 + 网络和分词</b></p>
+<ul><li><b>未命中的 token 数：</b> 通常是最大的一项，Prefill 的时间基本随它增长。这正是前缀缓存能降首字延迟的原因：命中的部分不用算。</li><li><b>排队等待：</b> 服务繁忙时请求要先等调度，提示词再短也会慢。</li><li><b>模型大小和硬件：</b> 模型越大、GPU 越少，Prefill 越慢。</li><li><b>缓存从哪里读：</b> 显存里最快；落到 SSD 的（如 DeepSeek）读起来稍慢。</li><li><b>网络和分词：</b> 一般很小。</li></ul>
+<p>这是按原理推导的结构，不是哪家官方给的公式；上面滑块图只用了最简单的一项（未命中的 token 数 ÷ 速度）。（原理推导）</p>
+<h2>代价与边界</h2>
+<ul><li><b>占显存或硬盘。</b> 缓存的 KV 不是免费的：它占着显存，显存紧张时会被 LRU 淘汰，所以“昨天的缓存今天还在”并不保证。有的厂商（如 DeepSeek）把 KV 转存到分布式 SSD，换来更大的容量，读起来比显存稍慢。</li><li><b>有存活时间。</b> 缓存只会保留一阵子。Claude 的缓存有 5 分钟和 1 小时两档，OpenAI 价格页上标注了 30 分钟、12 小时两档（以上均为 2026-11-24 价格页，随时间会变，请以官方页面为准）。每次命中会刷新计时。</li><li><b>块粒度带来损耗。</b> 命中长度是块大小的整数倍，尾部不满一块的内容不进缓存；另外有的厂商规定提示太短（比如不到 1,024 token）不缓存，具体门槛以文档为准。</li><li><b>缓存之间是隔离的。</b> 如果不同客户能命中彼此的缓存，就可以通过“响应快不快”反推别人的提示词内容。所以各家通常按账号 / 组织隔离缓存，不会跨客户共享（具体隔离范围请看各家文档）。（原理推导）</li><li><b>命中依赖路由。</b> 在多机部署里，同一个前缀的缓存在哪台机器上，请求就要尽量路由到哪台，否则等于没缓存。这也是为什么有的服务建议带上同一个会话标识。（原理推导）开源引擎里，缓存的 KV 块放在各个推理实例自己的 GPU 显存里，实例之间默认不共享；OpenAI 文档写明，同一组织和区域内对某个模型的路由取决于负载、前缀哈希和 <code>prompt_cache_key</code>，缓存不跨组织、不跨区域复用，而且 <code>prompt_cache_key</code> “影响路由，不会把请求固定到某台机器，也不保证命中”。缓存也不一定只放显存：DeepSeek 的文档写明会落到硬盘，其他厂商放在哪里官方没有公开。</li></ul>
+<p><b>换模型，缓存也会失效。</b> 缓存里存的是 K、V，它们是用模型自己的权重算出来的；换了模型（甚至同一个模型的不同版本），权重不同，同样的 token 算出的 K、V 完全不同，旧缓存对新模型没有意义。（原理推导）官方文档里：OpenAI 把 <code>model</code> 列为会影响缓存前缀的设置，原话是 “A different model can use different weights and caching behavior.”，并说同一组织和区域内的路由是针对某个模型的，但没有写“换模型一定未命中”这句话；Anthropic 我读到的部分没有讲换模型，只写了最小缓存长度因模型而异，以及改 thinking 配置、<code>effort</code> 等设置会让缓存失效。（两家文档我都只逐字读到前面一部分。）所以在同一个会话里中途换模型（比如简单问题切小模型），新模型要把整段前缀重新 Prefill 一遍，反而可能更慢更贵。</p>
+<h2>不同协议里怎么加缓存</h2>
+<p>前缀规则对三家都一样，区别只在<b>谁来决定缓存断点</b>：Anthropic 是你来标，OpenAI 默认自动、新模型可以手动标，DeepSeek 完全自动。以下内容核对自三家官方文档（2026-11-24 读取）：<a href="https://platform.claude.com/docs/en/build-with-claude/prompt-caching">Anthropic</a>、<a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI</a>、<a href="https://api-docs.deepseek.com/guides/kv_cache">DeepSeek</a>。</p>
+<table><thead><tr><th></th><th>Anthropic（Claude）</th><th>OpenAI</th><th>DeepSeek</th></tr></thead><tbody><tr><td>怎么开</td><td>请求顶层加一个 <code>cache_control</code>，或在内容块上加</td><td>默认自动，不用改请求。GPT-5.6 及以后可用 <code>prompt_cache_options</code> 控制</td><td>默认开启，不用改代码</td></tr><tr><td>缓存多久</td><td>默认 5 分钟，<code>"ttl": "1h"</code> 为 1 小时</td><td>GPT-5.6 及以后：<code>30m</code>（默认）或 <code>12h</code>；更早的模型用 <code>prompt_cache_retention</code>（<code>in_memory</code> 或 <code>24h</code>）</td><td>没有固定时长，用完后“通常几小时到几天内”清理</td></tr><tr><td>最短长度</td><td>因模型而异：512（Opus 5.5、Sonnet 5.5、Haiku 5.5 等）、1,024（Sonnet 5 等）、4,096（Haiku 4.5、Opus 4.5 / 4.6）</td><td>1,024（GPT-5.6 及以后）；更早的模型随请求设置变化</td><td>文档没给数字</td></tr><tr><td>命中数在哪看</td><td><code>usage.cache_read_input_tokens</code>（读），<code>cache_creation_input_tokens</code>（写）</td><td><code>cached_tokens</code>（具体路径我没核实到，以 API 参考为准）</td><td><code>usage.prompt_cache_hit_tokens</code> / <code>prompt_cache_miss_tokens</code></td></tr><tr><td>写入 / 读取价</td><td>写 1.25 倍（5 分钟）或 2 倍（1 小时）；读 0.1 倍（Opus 5.5、Sonnet 5.5 是 0.05 倍）</td><td>GPT-5.6 及以后：写 1.25 倍（30m）或 2.5 倍（12h）；读 0.1 倍。更早的模型没有额外写入费</td><td>见价格页</td></tr><tr><td>隔离</td><td>组织之间不共享；Claude API 上 workspace 之间也隔离</td><td>组织之间不共享</td><td>文档未说明</td></tr></tbody></table>
+<p><b>Anthropic：有两种写法。</b> 第一种最省事，在请求顶层加一个字段，系统自动把断点放在最后一个可缓存的块上：</p>
+<pre><code>{
+  &quot;model&quot;: &quot;claude-opus-5-5&quot;,
+  &quot;max_tokens&quot;: 1024,
+  &quot;cache_control&quot;: {&quot;type&quot;: &quot;ephemeral&quot;},
+  &quot;system&quot;: &quot;You are an AI assistant tasked with analyzing literary works...&quot;,
+  &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Analyze the major themes.&quot;}]
+}</code></pre>
+<p>第二种是在内容块上自己标断点，缓存到哪一块为止（官方示例：系统提示分两块，把长文档那一块标上）：</p>
+<pre><code>&quot;system&quot;: [
+  {&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;You are an AI assistant tasked with analyzing legal documents.&quot;},
+  {&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;Here is the full text of a complex legal agreement: [...]&quot;,
+   &quot;cache_control&quot;: {&quot;type&quot;: &quot;ephemeral&quot;}}
+]</code></pre>
+<p><b>“断点”是什么意思？</b> 它是你在提示词里插的一根“缓存到这里为止”的标记：从开头起，直到并包括标了 <code>cache_control</code> 的那一块，都进缓存；这一块后面的不进。比如请求按顺序是工具、系统提示、一份长文档、用户问题，在“长文档”那一块标断点，前三块一起被缓存，每次都不同的用户问题放在断点后面，不缓存，也不会让前面的缓存失效。顶层写一个 <code>cache_control</code> 是“自动标”，系统把断点放在最后一个可缓存的块上；直接写在某一块上是“自己标”，由你决定缓存到哪一块为止。官方限制是一个请求最多 4 个断点，每个断点最多往前回看 20 个块。多个断点的用处，我的推测是把它们放在不同“变化速度”的分界处（工具表几乎不变、系统提示偶尔变、对话历史每轮增长），这样某一层变了，前面更稳定的缓存还能命中；这一点官方文档没这样讲。</p>
+<p>要 1 小时的缓存，写成 <code>"cache_control": {"type": "ephemeral", "ttl": "1h"}</code>。两种写法可以一起用。</p>
+<p><code>cache_control</code> 的意思是“这里可以缓存”；<code>{"type": "ephemeral"}</code> 是缓存的类型，<code>ephemeral</code> 是“短暂的、临时的”，官方文档写的是它目前是唯一支持的类型，默认存活 5 分钟，所以每次都写同一句。放在顶层，是让系统自动把断点放在最后一个可缓存的块上；放在某一块上，是“缓存到这一块为止（包括这一块）”。</p>
+<p>Anthropic 的缓存前缀顺序固定为 <b>tools → system → messages</b>，“每一层的改动会让这一层和后面所有层失效”。几条官方写明的细则：</p>
+<ul><li>改工具定义：tools、system、messages 全部失效。</li><li>改 <code>tool_choice</code>、在任意位置增删图片：messages 失效。</li><li>命中要求“100% 一致”，包括所有文本和图片，直到标了断点的那一块。</li><li>一个请求最多 4 个断点；每个断点最多往前回看 20 个块，找有没有可命中的缓存。</li><li>没到最短长度，即使标了也不缓存，而且<b>不报错</b>，只能看 <code>usage</code> 里的数字才知道。</li></ul>
+<p>这几条正好对应前面的“前缀污染”：Anthropic 把“工具放最前、改工具就全断”写进了文档。</p>
+<p><b>OpenAI：默认自动，新模型多了手动选项。</b> 旧模型只要前缀够长就自动缓存；官方建议给共享同一前缀的请求带上稳定的 <code>prompt_cache_key</code>，帮助路由到同一台机器（它影响路由，不保证命中）。GPT-5.6 及以后，可以在 <code>prompt_cache_options</code> 里选 <code>implicit</code>（自动，断点放在最后一条可缓存消息的末尾）或 <code>explicit</code>（自己在内容块上标 <code>prompt_cache_breakpoint</code>），并用 <code>ttl</code> 选 <code>30m</code> 或 <code>12h</code>。官方页上的写法大致如下：</p>
+<pre><code>{
+  &quot;model&quot;: &quot;gpt-6.2-sol&quot;,
+  &quot;prompt_cache_key&quot;: &quot;support:customer_123&quot;,
+  &quot;prompt_cache_options&quot;: { &quot;mode&quot;: &quot;explicit&quot;, &quot;ttl&quot;: &quot;12h&quot; },
+  &quot;input&quot;: [
+    { &quot;role&quot;: &quot;developer&quot;, &quot;content&quot;: [
+      { &quot;type&quot;: &quot;input_text&quot;, &quot;text&quot;: &quot;Shared instructions...&quot;,
+        &quot;prompt_cache_breakpoint&quot;: { &quot;mode&quot;: &quot;explicit&quot; } } ] },
+    { &quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;The user&#x27;s question...&quot; }
+  ]
+}</code></pre>
+<p>这个例子是我把官方页上分开的几段拼在一起的，字段名都来自官方页面，但官方没有给出完整的合并示例。例子里的 <code>"role": "developer"</code> 是 OpenAI 的角色，不是笔误：官方文本指南写明 <code>developer</code> 消息是应用开发者给的指令，优先级高于 <code>user</code>；Responses API 的角色取值有 <code>user</code>、<code>assistant</code>、<code>system</code>、<code>developer</code>，<code>developer</code> 和 <code>system</code> 都高于 <code>user</code>，我没有找到文档说 <code>developer</code> 取代了 <code>system</code>。官方缓存页也写：想让可复用的指令符合缓存条件，就把它们放在 <code>input</code> 开头的 <code>developer</code> 消息里。另外，GPT-6.2 及以后把顶层 <code>instructions</code> 放在 <code>input</code> 之后，这部分按未缓存价计费，所以别把要缓存的静态内容放在那里。</p>
+<p><b>自己动手试试断点。</b> 下图是 GPT-5.6 及以后的断点规则：先在请求 1 里选断点（它负责写入缓存），再在请求 2 里选断点（它负责去命中）。试试这几件事：默认状态看隐式；勾上 Explicit 自己选断点；拖请求 1 或请求 2 的块，看哪个会让命中失效；切到 Earlier models 看 128 取整。</p>
+<div class="fig" data-fig="pxbreak" id="fig-pxbreak"></div><p class="cap">断点模拟器。点三角形选断点，拖动 ⋮ 手柄调整每个块的大小，虚线是最小可缓存长度。图里的 token 数和隐藏 token 都是示意。思路参考 OpenAI Prompt Caching 官方指南里的同类模拟器，代码和图为自己重写。</p>
+<p><b>DeepSeek：不用加任何东西。</b> 官方原话是默认对所有用户开启，不需要改代码。每个请求会在“用户输入末尾”和“模型输出末尾”各留下一个缓存前缀单元，另外还会在检测到的公共前缀和固定 token 间隔处留单元；后一个请求要<b>完整匹配</b>某个前缀单元才命中，而且前缀得已经被写入硬盘缓存，所以文档里的长文档例子是前两个请求都不命中、第三个才命中。官方也明确说是“尽力而为”，不保证 100% 命中。</p>
+<div class="callout"><div class="ct">三家共同的断点原则</div><p>判据：断点放在“静态”和“动态”的交界处。</p><ul><li>Anthropic：断点标在最后一个静态块上（系统提示、工具、固定文档之后），或者用顶层字段让系统自动放在最后一块。</li><li>OpenAI：<code>prompt_cache_key</code> 对同一类请求保持稳定；用 <code>explicit</code> 时把断点标在静态内容的末尾。</li><li>DeepSeek：没有断点可标，所以只能靠提示词本身“前面不变”。</li><li>无论哪家：上线后看命中数字，别只相信“我写对了”。</li></ul></div>
+<h2>实践清单</h2>
+<ol><li><b>静态内容放最前，动态内容放最后。</b> 系统提示词、工具定义、固定文档在前；用户提问、时间戳、会话 ID 在后。</li><li><b>别在提示词开头写时间、用户 ID、状态。</b> 这是最常见的前缀污染。</li><li><b>别在对话中途增删工具、改工具顺序。</b></li><li><b>历史只追加、不改写。</b> 要压缩历史，就接受压缩那一次的缓存失效，之后再继续追加。</li><li><b>看命中数再优化。</b> 看接口返回里的缓存命中 token 数（DeepSeek 是 <code>prompt_cache_hit_tokens</code>），数字稳定上涨，才说明吃到了缓存。</li><li><b>不同厂商机制不同（2026-11-24 价格页）。</b> Claude 需要在请求里加 <code>cache_control</code>（可以只加一个顶层字段，由系统自动管理断点），5 分钟缓存写入是 1.25 倍、1 小时写入是 2 倍输入价，命中读取 0.05–0.1 倍；OpenAI 价格页单列了缓存写入价（以 Sol 为例，30 分钟 1.25 倍，12 小时 2.5 倍）；DeepSeek 自动识别，不用改代码。</li></ol>
+<p>延伸阅读：<i>Manus上下文工程经验</i>（KV-Cache 优化与 10 倍成本差异）。</p>
+<h2>给 10 岁小朋友的版本</h2>
+<ol><li>你每天上学，老师都先把<b>同样的开场白</b>讲一遍：“同学们好，今天我们学……”。如果每次都要从头一个字一个字抄，太累了。</li><li>聪明的做法是：第一天抄好，<b>留着</b>。第二天老师说的开头一样，你就直接翻出昨天的笔记。</li><li>但是只要老师的<b>第一个字</b>变了，你就不能直接用了，因为后面每一句都是接着前一句说的。</li><li>笔记本很大，也有不够用的时候：这时候你会把<b>最久没翻过</b>的那几页撕掉，给新的腾地方。</li><li>所以要想省力气，老师（也就是你写的提示词）最好把<b>不会变的话放前面，会变的话放后面</b>。</li><li>每一页笔记也不是一个字一个字存的，而是<b>十几个字一页</b>，页码是用前一页的页码算出来的，一翻就能找到。</li></ol>
+<h2>回顾</h2>
+<ul><li><b>为什么只能是前缀：</b> 一个词的 K、V 取决于它自己和左边所有的词，所以从第一个词开始逐字一致，才能整段复用。</li><li><b>怎么找：</b> vLLM 把提示词分块（典型 16 个 token 一块），每块哈希里带上前一块的哈希，形成哈希链，查表就能找到最长命中前缀；SGLang 则在前缀树上做前缀匹配。</li><li><b>怎么存：</b> 两种办法都让共同前缀只存一份；显存紧张时都按 LRU 淘汰（vLLM 从空闲队列队首，SGLang 从叶子）。</li><li><b>怎么用：</b> 命中的块不做 Prefill，只算未命中的尾巴，省首字延迟，也省输入费用。</li><li><b>怎么写提示词：</b> 静态在前、动态在后，历史只追加，别改工具列表。</li><li><b>边界：</b> 有存活时间、尾块不缓存、按账号隔离、多机要路由。</li></ul>
+<h2>继续探索</h2>
+<ul><li><i>《图解 KV Cache》</i>：这篇的前传，讲 K、V 为什么能存。</li><li><a href="https://docs.vllm.ai/en/latest/design/prefix_caching/">vLLM：Prefix Caching 设计文档</a>：块哈希、哈希表、空闲队列和 LRU 的实现细节。</li><li><a href="https://arxiv.org/abs/2309.06180">Efficient Memory Management for Large Language Model Serving with PagedAttention</a>（Kwon et al., 2023）：分页管理 KV 显存，块和引用计数的来源。</li><li><a href="https://arxiv.org/abs/2312.07104">SGLang: Efficient Execution of Structured Language Model Programs</a>（Zheng et al., 2023）：第 3 节是 RadixAttention，前缀树 + 叶子优先的 LRU。</li></ul>
+</div><script>const ICONS={};
+/* illustrated-explainer core: helpers + boot. Put your FIGS.<id> = (root)=>{...} functions between the two parts. */
+/* Figures in the visual language of "The Illustrated Transformer":
+   green = embedding x, purple = Query, orange = Key, blue = Value, pink = output z.
+   self-attention = peach box, feed-forward = light-blue box, decoder = pink outline. */
+const ROLE={x:'#b5e0a1',q:'#dcbef2',k:'#fcc990',v:'#a9cbf3',z:'#f6b2c8'};
+const TXT={x:'#6cc04a',q:'#b06fdc',k:'#f0a04b',v:'#5b9be0',z:'#e8789f'};
+const FIGS={};
+function el(tag,cls,html,st){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;if(st)Object.assign(e.style,st);return e}
+function vec(role,n=4,seed=1,sz=22){const v=el('span','vec');for(let i=0;i<n;i++){const c=el('i');c.style.background=ROLE[role];c.style.width=c.style.height=sz+'px';
+  c.style.boxShadow=`inset 0 0 0 60px rgba(255,255,255,${(0.42*Math.abs(Math.sin(seed*7.1+i*3.3))).toFixed(2)})`;v.appendChild(c)}return v}
+function chip(t,role,extra){const c=el('span','chip',t);c.style.background=ROLE[role]||'#fff';c.style.borderColor=role?'#6a6a6a':'#bbb';if(extra)Object.assign(c.style,extra);return c}
+const AV=(len=26)=>`<svg class="ar" width="12" height="${len}" viewBox="0 0 12 ${len}"><line x1="6" y1="${len}" x2="6" y2="7" stroke="#555" stroke-width="2"/><path d="M1 9 L6 0 L11 9 Z" fill="#555"/></svg>`;
+const AH=(len=34)=>`<svg class="ar" width="${len}" height="12" viewBox="0 0 ${len} 12"><line x1="0" y1="6" x2="${len-7}" y2="6" stroke="#555" stroke-width="2"/><path d="M${len-9} 1 L${len} 6 L${len-9} 11 Z" fill="#555"/></svg>`;
+const sub=(s)=>`<sub>${s}</sub>`;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const wrapOut=c=>{const d=el('div','dout');d.append(c);return d};
+function kvg(role,seed){const g=el('span','kvg');g.append(vec(role,2,seed,11),el('small','',role.toUpperCase()));g.lastChild.style.color=TXT[role];return g}
+function pauseBtn(r,ctrl){const a=el('a','pb','⏸ Pause');r._pa=a;a.onclick=()=>setPaused(r,!r._paused);ctrl.append(' · ',a)}
+function setPaused(r,v){r._paused=v;if(r._pa)r._pa.textContent=v?'▶ Resume':'⏸ Pause'}
+const unpause=r=>setPaused(r,false);
+async function psleep(r,ms){let t=0;while(t<ms){await sleep(50);if(!r._paused)t+=50}}
+
+
+/* ---- Prefix Caching figures ---- */
+const HIT='#b5e0a1',MISS='#f7b9b9';
+function stepper(r,N,render,caps,ms=1800,fin=N-1){
+  const cap=el('div','pxcap');const ctrl=el('div','ctrl');
+  const b1=el('a','','▶ Replay'),b2=el('a','','Next step'),b0=el('a','','Prev step');
+  ctrl.append(b1);pauseBtn(r,ctrl);ctrl.append(' · ',b0,' · ',b2);r.append(cap,ctrl);
+  let s=0,run=0;
+  const show=n=>{s=Math.max(0,Math.min(N-1,n));render(s);cap.textContent=caps[s]};
+  const play=async()=>{const id=++run;unpause(r);show(0);for(let i=1;i<N;i++){await psleep(r,ms);if(id!==run)return;show(i)}};
+  b1.onclick=play;b2.onclick=()=>{run++;show(s+1)};b0.onclick=()=>{run++;show(s-1)};
+  show(fin);r._f={play,final:()=>{run++;show(fin)}};
+}
+const fmt=n=>n.toLocaleString('en-US');
+
+/* 1. Agent loop: why the same prefix gets recomputed */
+FIGS.pxwaste=(r)=>{
+  const REQ=[['R1',[['System',2000],['Tools',1000],['Q1',200]]],
+    ['R2',[['System',2000],['Tools',1000],['Q1',200],['A1',300],['Q2',200]]],
+    ['R3',[['System',2000],['Tools',1000],['Q1',200],['A1',300],['Q2',200],['A2',300],['Q3',200]]]];
+  let cache=true,n=3;
+  const tog=el('div','pxtog'),ta=el('a','','Without prefix cache'),tb=el('a','','With prefix cache');tog.append(ta,tb);
+  const grid=el('div','pxgrid'),info=el('div','pxinfo');
+  const rows=REQ.map(([name,bl])=>{const row=el('div','pxrow');const lab=el('div','pxrl',name);const cs=el('div','pxcs');
+    const chips=bl.map(([t,k])=>{const c=el('span','pxblock',`${t}<small>${fmt(k)}</small>`);cs.append(c);return c});
+    const cnt=el('div','pxcnt');row.append(lab,cs,cnt);grid.append(row);return {row,chips,cnt,bl}});
+  const hits=(i)=>{if(!cache||i==0)return 0;const a=REQ[i-1][1],b=REQ[i][1];let k=0;while(k<a.length&&a[k][0]==b[k][0])k++;return k};
+  const render=(s)=>{n=s;ta.className=cache?'':'on';tb.className=cache?'on':'';let tot=0,all=0;
+    rows.forEach((o,i)=>{const vis=s>=i;o.row.classList.toggle('hid',!vis);const h=hits(i);let comp=0,total=0;
+      o.chips.forEach((c,j)=>{const k=o.bl[j][1];total+=k;const hit=j<h;if(!hit)comp+=k;c.style.background=hit?HIT:MISS;c.classList.toggle('hitb',hit)});
+      o.cnt.innerHTML=`computed <b>${fmt(comp)}</b> / ${fmt(total)}`;if(vis){tot+=comp;all+=total}});
+    info.innerHTML=`Prefill tokens computed so far: <b>${fmt(tot)}</b> of ${fmt(all)} sent · <span class="lg"><i style="background:${HIT}"></i>cache hit</span><span class="lg"><i style="background:${MISS}"></i>computed</span>`};
+  ta.onclick=()=>{cache=false;render(n)};tb.onclick=()=>{cache=true;render(n)};
+  r.append(tog,grid,info);
+  stepper(r,3,render,['R1: nothing is cached yet, every block goes through Prefill. (Each request resends the whole conversation; numbers are token counts.)',
+    'R2: System, Tools and Q1 are identical to R1. Only A1 and Q2 are new.',
+    'R3: same again, only the tail is new. The shared prefix keeps growing.'],1900,2);
+};
+
+/* 2. Causal dependency: change a token, everything to its right is invalid */
+FIGS.pxcausal=(r)=>{
+  const T=['You','are','a','helpful','assistant','.','Hi'];let ch=3;
+  const row=el('div','pxcausal'),info=el('div','pxinfo');
+  const cols=T.map((t,i)=>{const c=el('div','pxcc');const tok=el('div','pxtok',t);tok.onclick=()=>{ch=ch==i?-1:i;draw()};
+    const kv=el('div','pxkv');kv.append(kvg('k',i+1),kvg('v',i+3));const st=el('div','pxst');c.append(tok,kv,st);row.append(c);return {tok,kv,st}});
+  const draw=()=>{let ok=0;cols.forEach((o,i)=>{const bad=ch>=0&&i>=ch;if(!bad)ok++;o.kv.style.background=bad?MISS:HIT;o.st.textContent=bad?'recompute':'reuse';o.st.style.color=bad?'#c0392b':'#4a8a2a';
+      o.tok.classList.toggle('chg',i==ch);o.tok.textContent=(i==ch?'✎ ':'')+T[i]});
+    info.innerHTML=`Reusable K,V: <b>${ok}</b> / ${T.length} tokens`};
+  r.append(el('div','lab2','Click a token to change it (click again to undo)'),row,info);draw();
+  r._f={play:null,final:()=>{ch=3;draw()}};
+};
+
+/* 3. Block hash chain */
+FIGS.pxblocks=(r)=>{
+  const A=[['You','are','helpful'],['assistant','.','Reply'],['in','English','.']],TAIL=['Hi','!'];
+  const H=(prev,toks)=>{let x=5381;for(const c of prev+'|'+toks.join(' '))x=((x*33)^c.charCodeAt(0))>>>0;return x.toString(16).padStart(8,'0').slice(0,4)};
+  let chg=new Set(['1-1']);
+  const chain=(get)=>{let p='root';return A.map((b,i)=>{const t=b.map((_,j)=>get(i,j));p=H(p,t);return p})};
+  const hA=chain((i,j)=>A[i][j]);
+  const mk=(lab)=>{const o=el('div','pxreq');o.append(el('div','lab2',lab));const bs=el('div','pxbs');o.append(bs);return {o,bs}};
+  const ra=mk('Request A (already cached)'),rb=mk('Request B (click a token to change it)');
+  const info=el('div','pxinfo'),ctrl=el('div','ctrl'),reset=el('a','','Reset (all same)'),demo=el('a','','Change one token in block 2');
+  ctrl.append(reset,' · ',demo);
+  const draw=()=>{ra.bs.innerHTML='';rb.bs.innerHTML='';const hB=chain((i,j)=>chg.has(i+'-'+j)?A[i][j]+'*':A[i][j]);let hit=0,alive=true;
+    A.forEach((b,i)=>{const ba=el('div','pxb'),bb=el('div','pxb');
+      b.forEach((t,j)=>{ba.append(el('span','pxt',t));const c=el('span','pxt'+(chg.has(i+'-'+j)?' chg':''),(chg.has(i+'-'+j)?t+'*':t));c.onclick=()=>{const k=i+'-'+j;chg.has(k)?chg.delete(k):chg.add(k);draw()};bb.append(c)});
+      const same=hA[i]==hB[i]&&alive;if(!same)alive=false;if(same)hit++;
+      ba.append(el('div','pxh',`h${i+1} = <b>${hA[i]}</b>`));bb.append(el('div','pxh',`h${i+1} = <b>${hB[i]}</b>`));
+      bb.append(el('div','pxs',same?'HIT':'MISS'));ba.append(el('div','pxs','&nbsp;'));bb.style.background=same?HIT:MISS;ba.style.background='#fff';
+      ra.bs.append(ba);rb.bs.append(bb)});
+    [ra,rb].forEach(o=>{const t=el('div','pxb tail');TAIL.forEach(x=>t.append(el('span','pxt',x)));t.append(el('div','pxh','partial block'),el('div','pxs','not cached'));o.bs.append(t)});
+    info.innerHTML=`Blocks reused: <b>${hit}</b> / ${A.length} · Rule: <i>h<sub>i</sub> = H( h<sub>i−1</sub>, tokens of block i )</i>`};
+  reset.onclick=()=>{chg=new Set();draw()};demo.onclick=()=>{chg=new Set(['1-1']);draw()};
+  r.append(ra.o,rb.o,info,ctrl);draw();r._f={play:null,final:()=>{chg=new Set(['1-1']);draw()}};
+};
+
+/* 4. Radix tree with sharing + LRU */
+FIGS.pxtree=(r)=>{
+  const TRUNK=625,LEAF=3,Q=['Fix this bug','Summarize the doc','Write a test','Explain line 42','Translate to French','Add logging'];
+  let users,clock,nxt;const reset=()=>{users=[{n:'A',t:1},{n:'B',t:2},{n:'C',t:3}];clock=3;nxt=3};
+  const wrap=el('div','pxtr'),info=el('div','pxinfo'),ctrl=el('div','ctrl');
+  const add=el('a','','+ New request'),ev=el('a','','Evict LRU leaf'),rs=el('a','','Reset');ctrl.append(add,' · ',ev,' · ',rs);
+  const draw=()=>{wrap.innerHTML='';const lru=users.length?users.reduce((a,b)=>a.t<b.t?a:b):null;
+    wrap.append(el('div','pxroot','root'),el('div','pxhl'));
+    wrap.append(el('div','pxtrunk','System prompt + Tools<small>10,000 tokens ≈ 625 blocks · stored once</small>'));
+    const br=el('div','pxbr');
+    for(let i=0;i<6;i++){const u=users[i];if(!u){br.append(el('div','pxleaf hid','x'));continue}
+      const l=el('div','pxleaf',`<div><b>User ${u.n}</b>: ${Q[u.n.charCodeAt(0)-65]}</div><small>≈ ${LEAF} blocks${u===lru&&users.length>1?' · <em>LRU</em>':''}</small>`);
+      l.onclick=()=>{u.t=++clock;draw()};br.append(l)}
+    wrap.append(el('div','pxhl short'),br);
+    const n=users.length;info.innerHTML=`Stored with sharing: <b>${fmt(TRUNK+LEAF*n)}</b> blocks · without sharing: <b>${fmt(n*(TRUNK+LEAF))}</b> blocks`};
+  add.onclick=()=>{if(users.length<6){users.push({n:String.fromCharCode(65+nxt++),t:++clock});draw()}};
+  ev.onclick=()=>{if(users.length){const lru=users.reduce((a,b)=>a.t<b.t?a:b);users=users.filter(u=>u!==lru);draw()}};
+  rs.onclick=()=>{reset();draw()};
+  r.append(wrap,info,ctrl);reset();users.push({n:'D',t:4});clock=4;nxt=4;draw();
+  r._f={play:null,final:()=>{reset();users.push({n:'D',t:4});clock=4;nxt=4;draw()}};
+};
+
+/* 5. What the engine does for one request */
+FIGS.pxflow=(r)=>{
+  const S=['Tokenize','Split into blocks + hash chain','Look up the longest cached prefix','Prefill only the new tail','Decode','Register new blocks'];
+  const row=el('div','pxfl');const bx=S.map((t,i)=>{if(i)row.append(el('span','pxfa',AH(22)));const b=el('div','pxfb',`<small>${i+1}</small>${t}`);row.append(b);return b});
+  const det=el('div','pxdet');
+  const bar=el('div','pxbar');const g=el('i');g.style.background=HIT;g.style.width='99.5%';g.textContent='10,000 tokens: cache hit';
+  const p=el('i');p.style.background=MISS;p.style.width='.5%';bar.append(g,p);const bl=el('div','pxbl','<span>◀ read from cache</span><span>computed: 50 tokens ▶</span>');
+  const D=['Prompt text → 10,050 tokens.',
+    '10,050 ÷ 16 = 628 full blocks + 2 leftover tokens. Hash chain h₁ … h₆₂₈ (the 2 leftover tokens form no full block).',
+    'Walk h₁, h₂, … in the cache table: h₁ … h₆₂₅ are found, h₆₂₆ is not. Hit = 625 blocks = 10,000 tokens.',
+    'Prefill runs only on the remaining 50 tokens. Their attention reads the 10,000 cached K,V as if just computed.',
+    'Decode: one token per step, exactly as without caching.',
+    'The new full blocks get registered under their hashes, so the next turn can hit them. Blocks in use are pinned; idle ones become LRU candidates.'];
+  r.append(row,det,bar,bl);
+  stepper(r,6,(s)=>{bx.forEach((b,i)=>{b.classList.toggle('on',i==s);b.classList.toggle('done',i<s)});det.textContent=D[s];
+    [bar,bl].forEach(e=>e.classList.toggle('hid',s<2))},[
+    '1 / 6','2 / 6','3 / 6','4 / 6','5 / 6','6 / 6'],2300,3);
+};
+
+/* 6. cost slider */
+FIGS.pxcost=(r)=>{
+  let L=32000,hit=90;const SPEED=5000,RATIO=0.1;
+  const lb=el('div','pxtog');const Ls=[8000,32000,128000].map(v=>{const a=el('a','',fmt(v)+' tokens');a.onclick=()=>{L=v;draw()};lb.append(a);return [a,v]});
+  const sl=document.createElement('input');sl.type='range';sl.min=0;sl.max=100;sl.value=hit;sl.className='pxsl';
+  const lbl=el('div','pxsll');
+  const mkbar=(name)=>{const row=el('div','pxcb');const n=el('div','pxcbn',name),tr=el('div','pxcbt'),bar=el('i'),v=el('div','pxcbv');tr.append(bar);row.append(n,tr,v);return {row,bar,v}};
+  const t1=mkbar('Time to first token'),c1=mkbar('Input cost');
+  const draw=()=>{hit=+sl.value;Ls.forEach(([a,v])=>a.className=v==L?'on':'');lbl.innerHTML=`Prompt length: <b>${fmt(L)}</b> · shared-prefix hit rate: <b>${hit}%</b>`;
+    const comp=L*(1-hit/100),tt=comp/SPEED,t0=L/SPEED,cost=(1-hit/100)+hit/100*RATIO;
+    t1.bar.style.width=(tt/t0*100)+'%';t1.bar.style.background=ROLE.q;t1.v.innerHTML=`<b>${tt.toFixed(2)} s</b><small>vs ${t0.toFixed(2)} s</small>`;
+    c1.bar.style.width=(cost*100)+'%';c1.bar.style.background=ROLE.k;c1.v.innerHTML=`<b>${Math.round(cost*100)}%</b><small>vs 100%</small>`};
+  sl.oninput=draw;
+  r.append(el('div','lab2','Pick a prompt length, then drag the hit rate'),lb,lbl,sl,t1.row,c1.row,el('div','pxnote','Illustrative model: prefill speed 5,000 tokens/s, cache-hit input priced at 1/10.'));
+  draw();r._f={play:null,final:()=>{L=32000;sl.value=90;draw()}};
+};
+
+
+/* 7. trie -> radix tree -> edge split */
+FIGS.pxradix=(r)=>{
+  const CW=t=>14+7.5*t.length;
+  const REQ=['A: You are helpful . Fix this bug','B: You are helpful . Summarize the doc','C: You are helpful . Fix this typo','D (new): You are helpful . Fix that'];
+  const head=el('div','pxrq');const hl=REQ.map(t=>{const d=el('div','',t);head.append(d);return d});
+  const box=el('div','pxsvg');r.append(head,box);
+  const col={sh:'#b5e0a1',br:'#fcc990',bad:'#f7b9b9'};
+  const chip=(cx,cy,t,c)=>{const w=CW(t);return `<rect x="${cx-w/2}" y="${cy-13}" width="${w}" height="26" rx="6" fill="${c}" stroke="#666" stroke-width="1.5"/><text x="${cx}" y="${cy+5}" text-anchor="middle" font-size="13">${t}</text>`};
+  const ln=(x1,y1,x2,y2)=>`<path d="M${x1} ${y1} H${(x1+x2)/2} V${y2} H${x2}" fill="none" stroke="#777" stroke-width="1.6"/>`;
+  const kv=(x,y,n)=>{let s='';for(let i=0;i<n;i++)s+=`<rect x="${x+i*17}" y="${y}" width="7" height="7" fill="${ROLE.k}" stroke="#888" stroke-width=".6"/><rect x="${x+i*17+7}" y="${y}" width="7" height="7" fill="${ROLE.v}" stroke="#888" stroke-width=".6"/>`;return s};
+  const edge=(x,cy,w,t,n,c)=>`<rect x="${x}" y="${cy-20}" width="${w}" height="40" rx="7" fill="${c}" stroke="#666" stroke-width="1.5"/><text x="${x+w/2}" y="${cy-3}" text-anchor="middle" font-size="13">${t}</text>`+kv(x+w/2-n*8.5,cy+6,n);
+  const dot=(x,y)=>`<circle cx="${x}" cy="${y}" r="4" fill="#666"/>`;
+  const trie=()=>{const Y=130;let s='';
+    const P=[['root',20,Y],['You',70,Y],['are',118,Y],['helpful',178,Y],['.',232,Y],['Fix',280,86],['this',332,86],['bug',392,62],['typo',392,110],['Summarize',290,190],['the',360,190],['doc',412,190]];
+    const L=[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[6,8],[4,9],[9,10],[10,11]];
+    L.forEach(([a,b])=>{const A=P[a],B=P[b];s+=ln(A[1]+(a==0?10:CW(A[0])/2),A[2],B[1]-CW(B[0])/2,B[2])});
+    P.forEach(([t,x,y],i)=>{s+=i==0?`<circle cx="${x}" cy="${y}" r="10" fill="#fff" stroke="#666" stroke-width="1.5"/>`:chip(x,y,t,i<=4?col.sh:col.br)});
+    return s+`<text x="470" y="130" font-size="12" fill="#777">11 nodes,</text><text x="470" y="146" font-size="12" fill="#777">1 token's KV each</text>`};
+  const radix=(m)=>{let s='';
+    s+=`<circle cx="25" cy="130" r="10" fill="#fff" stroke="#666" stroke-width="1.5"/>`+ln(35,130,55,130);
+    s+=edge(55,130,150,'You are helpful .',4,col.sh)+dot(215,130);
+    if(m<4){s+=ln(215,130,235,86)+ln(215,130,235,190);
+      if(m==2){s+=edge(235,86,80,'Fix this',2,col.br)}
+      else{s+=`<rect x="235" y="66" width="44" height="40" rx="7" fill="${col.sh}" stroke="#666" stroke-width="1.5"/><text x="257" y="83" text-anchor="middle" font-size="13">Fix</text>`+kv(240,92,1)+`<rect x="279" y="66" width="44" height="40" rx="7" fill="${col.bad}" stroke="#666" stroke-width="1.5"/><text x="301" y="83" text-anchor="middle" font-size="13">this</text>`+kv(284,92,1)}
+      s+=dot(m==2?325:333,86)+ln(m==2?325:333,86,345,62)+ln(m==2?325:333,86,345,110)+edge(345,62,56,'bug',1,col.br)+edge(345,110,56,'typo',1,col.br);
+      s+=edge(235,190,150,'Summarize the doc',3,col.br);
+      if(m==3)s+=`<text x="470" y="92" font-size="12" fill="#c0392b">“this” ≠ “that”</text>`;
+      else s+=`<text x="470" y="130" font-size="12" fill="#777">5 edges,</text><text x="470" y="146" font-size="12" fill="#777">KV stored per edge</text>`}
+    else{s+=ln(215,130,235,86)+ln(215,130,235,190);
+      s+=edge(235,86,44,'Fix',1,col.sh)+dot(289,86)+ln(289,86,309,50)+ln(289,86,309,122);
+      s+=edge(309,50,54,'this',1,col.br)+dot(373,50)+ln(373,50,393,26)+ln(373,50,393,74)+edge(393,26,56,'bug',1,col.br)+edge(393,74,56,'typo',1,col.br);
+      s+=edge(309,122,54,'that',1,col.bad);
+      s+=edge(235,190,150,'Summarize the doc',3,col.br);
+      s+=`<text x="470" y="122" font-size="12" fill="#777">computed: “that”</text><text x="470" y="138" font-size="12" fill="#777">reused: 5 tokens</text>`}
+    return s};
+  const draw=(k)=>{const s=k+1;hl.forEach((d,i)=>d.style.visibility=(i<3||s>=3)?'visible':'hidden');
+    box.innerHTML=`<svg viewBox="0 0 580 230" width="700">${s==1?trie():radix(s)}</svg>`};
+  stepper(r,4,draw,['Three requests start with the same tokens (You are helpful .). A plain prefix tree (trie): one node per token, 11 nodes, each holds the KV of one token.',
+    'Radix tree: a run of tokens with no branching becomes ONE edge. 5 edges, each stores the KV of its tokens.',
+    'New request D: edge 1 matches in full. On the edge “Fix this”, only “Fix” matches: “this” ≠ “that”.',
+    'The edge is split in two: “Fix” stays shared; “this” and “that” become two branches. Only “that” needs Prefill.'],2300,3);
+};
+FIGS.prefix=(r)=>{
+  const BASE=['System prompt','Tools','Documents','History','Question'];let order,chg;
+  const A=el('div','prow2'),B=el('div','prow2'),info=el('div','pinfo');
+  const ctrl=el('div','ctrl');
+  const set=(pos)=>{order=pos=='front'?['Timestamp',...BASE]:[...BASE,'Timestamp'];chg=pos=='none'?new Set():new Set(['Question','Timestamp']);draw()};
+  const draw=()=>{A.innerHTML='';B.innerHTML='';let first=order.findIndex(t=>chg.has(t));if(first<0)first=order.length;
+    order.forEach((t,i)=>{A.append(chip(t,'x'));const c=chip((chg.has(t)?'✎ ':'')+t,null,{background:i<first?ROLE.x:'#f7b9b9',borderColor:'#6a6a6a',cursor:'pointer'});c.onclick=()=>{chg.has(t)?chg.delete(t):chg.add(t);draw()};B.append(c)});
+    const hit=first,miss=order.length-first;info.innerHTML=`Hit <b>${hit}</b> blocks · Miss <b>${miss}</b> blocks · Relative cost <b>${Math.round((hit*.1+miss)/order.length*100)}%</b>`};
+  const bs=[['Timestamp first','front'],['Timestamp last','end'],['All identical','none']].map(([t,p])=>{const a=el('a','',t);a.onclick=()=>set(p);return a});
+  bs.forEach((a,i)=>{if(i)ctrl.append(' · ');ctrl.append(a)});
+  r.append(el('div','lab2','Request A (cached)'),A,el('div','lab2','Request B (click a block to toggle “changed”)'),B,info,ctrl);
+  set('end');r._f={play:null,final:()=>set('end')}};
+/* 9. Breakpoint simulator. Semantics follow the OpenAI prompt-caching guide simulator (rules re-implemented from observed behavior, own code and styling):
+   two requests, 3,000 illustrative hidden tokens, 1,024-token minimum, 256-token drag grid; edits to request 1 stay in sync with request 2, edits to request 2 break the shared prefix. */
+FIGS.pxbreak=(r)=>{
+  const CAP=20000,HID=3000,MINP=1024,GRID=256,LEG=1024,MAXSEG=17000;
+  const COL={tool:'#dbeafe',dev:'#e7e7ea',hist:'#d3f0dd',fu:'#ffe2d1'};
+  const NAMES=['developer-2','developer','user-2','user'];
+  const SLOT={'developer-2':'developer block, midpoint','developer':'developer block, end','user-2':'user message, midpoint','user':'user message, end'};
+  const def=()=>({A:{developer:8000,tools:2000,user:2000},B:{developer:8000,tools:2000,user:3000},H:2000,BP:{1:['developer'],2:['developer']},POS:{1:{},2:{}}});
+  const st=Object.assign({gen:'new',mode:'implicit',expl:false,leg:1024},def());
+  const pct=x=>(x/CAP*100)+'%';
+  const limit=()=>st.mode==='implicit'?3:4;
+  const req=q=>q===1?st.A:st.B;
+  const C=q=>{const a=req(q);return a.developer+a.tools+(q===2?st.H:0)+a.user};
+  const END=q=>HID+C(q);
+  const MINPOS=()=>st.gen==='early'?Math.ceil((HID+MINP)/st.leg)*st.leg:HID+MINP;
+  const sharedEnd=()=>{const a=st.A,b=st.B;
+    if(a.tools!==b.tools)return HID+Math.min(a.tools,b.tools);
+    if(a.developer!==b.developer)return HID+a.tools+Math.min(a.developer,b.developer);
+    if(st.H!==a.user)return HID+a.developer+a.tools+Math.min(a.user,st.H);
+    return HID+a.developer+a.tools+a.user};
+  const posOf=(q,name)=>{const a=req(q),i=q===2?st.H:st.A.user,tot=END(q);
+    const o=Math.max(HID+MINP,HID+a.tools+1),cl=x=>Math.min(tot,Math.max(o,x));
+    const ov=st.POS[q][name];if(ov!==undefined)return cl(HID+a.tools+ov);
+    const isDev=name.startsWith('developer'),base=isDev?HID+a.tools:HID+a.developer+a.tools,d=isDev?a.developer:i;
+    const f=name.endsWith('-2')?Math.floor(d/2):(name==='user'&&st.mode==='implicit'?Math.floor(d*.75):d);
+    return cl(base+Math.max(1,Math.min(d,f)))};
+  const showTri=q=>st.gen==='new'&&st.expl&&C(q)>=MINP;
+  const bps=q=>{const tot=END(q);
+    if(st.gen==='early'){const a=[];for(let x=st.leg;x<=tot;x+=st.leg)if(x-HID>=MINP)a.push(x);return a}
+    const s=new Set();if(st.expl)st.BP[q].slice(0,limit()).forEach(n=>s.add(posOf(q,n)));
+    if(st.mode==='implicit')s.add(tot);
+    return [...s].filter(x=>x-HID>=MINP).sort((a,b)=>a-b)};
+  const calc=()=>{const R1=bps(1),R2=bps(2),T=sharedEnd(),o=new Set(R2);
+    if(st.gen!=='early'&&st.mode==='implicit'){o.add(HID+st.B.tools+st.B.developer);o.add(HID+st.B.tools+st.B.developer+st.H)}
+    const phys=R1.filter(x=>x<=T&&o.has(x)).pop()||0,overlap=R1.some(x=>o.has(x));
+    const mk=q=>{const n=C(q),r=q===1?R1:R2,s=q===1?0:phys;
+      if(st.gen==='early'){const t=s?Math.floor((s-HID)/128)*128:0;return{n,cached:t,write:0,bp:r,phys:s}}
+      const c=s>0?Math.max(s-HID,0):0,l=r.length?r[r.length-1]:0,u=Math.max(l-HID-c,0);return{n,cached:c,write:u,bp:r,phys:s}};
+    return{u1:mk(1),u2:mk(2),phys,overlap,R1,R2,o,T}};
+
+  /* segment geometry and limits */
+  const segs=q=>{const a=req(q),s=[{k:'hid',n:HID},{k:'tool',id:'tools',n:a.tools},{k:'dev',id:'developer',n:a.developer}];
+    if(q===2)s.push({k:'hist',id:'history',n:st.H});s.push({k:q===1?'hist':'fu',id:'user',n:a.user});return s};
+  const val=(q,t)=>t==='history'?st.H:req(q)[t];
+  const MINSEG={developer:256,tools:0,history:64,user:64};
+  const maxSeg=(q,t)=>{const o=C(q),s=st.H,c=val(q,t),l=CAP-HID-o+c;
+    if(q===2)return Math.min(MAXSEG,l);
+    const u=C(2),d=(t==='user'||t==='history')?s:st.B[t],f=CAP-HID-u+d;return Math.min(MAXSEG,l,f)};
+  const setSeg=(q,t,v)=>{if(t==='history'){st.H=v;return}
+    if(q===2){st.B[t]=v;return}
+    st.A[t]=v;if(t==='developer'||t==='tools')st.B[t]=v;if(t==='user')st.H=v};
+  const snapSeg=(q,t,raw,init,lo,hi)=>{const s=[init];
+    if(q===2){if(t==='tools')s.push(st.A.tools);if(t==='developer')s.push(st.A.tools+st.A.developer-st.B.tools);if(t==='history')s.push(C(1)-st.B.tools-st.B.developer)}
+    const c=req(q),l=HID+(t==='tools'?0:c.tools)+((t==='history'||t==='user')?c.developer:0)+((t==='user'&&q===2)?st.H:0);
+    const u=s.filter(x=>x>=lo&&x<=hi).sort((x,y)=>Math.abs(x-raw)-Math.abs(y-raw))[0];
+    const d=u!==undefined&&Math.abs(u-raw)<=GRID/2?u:Math.round((l+raw)/GRID)*GRID-l;return Math.min(hi,Math.max(lo,d))};
+  const bpRange=q=>{const e=C(q)-req(q).tools;return{min:Math.min(e,Math.max(1,MINP-req(q).tools)),max:e}};
+  const snapBp=(q,off)=>{const base=HID+req(q).tools,tgt=base+off,cand=[];
+    [1,2].forEach(n=>{const rr=req(n),bs=HID+rr.tools,hh=n===1?st.A.user:st.H;cand.push(bs+rr.developer,bs+rr.developer+hh);if(n!==q)cand.push(...bps(n))});
+    const best=cand.sort((x,y)=>Math.abs(x-tgt)-Math.abs(y-tgt))[0];
+    return(best!==undefined&&Math.abs(best-tgt)<=GRID/2?best:Math.round(tgt/GRID)*GRID)-base};
+
+  /* drag handling (window listeners survive re-render) */
+  let drag=null;
+  const endDrag=()=>{if(drag&&drag.kind==='bp'&&!drag.moved){const b=st.BP[drag.q],i=b.indexOf(drag.name);if(i>=0)b.splice(i,1);draw()}
+    drag=null;window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',endDrag);window.removeEventListener('pointercancel',endDrag)};
+  function mv(e){if(!drag)return;if(e.buttons===0){endDrag();return}
+    const dx=(e.clientX-drag.x0)/drag.w*CAP;
+    if(drag.kind==='seg'){const{q,t}=drag,lo=MINSEG[t],hi=Math.max(lo,maxSeg(q,t));
+      const v=Math.min(hi,Math.max(lo,snapSeg(q,t,drag.v0+dx,drag.v0,lo,hi)));
+      if(v!==val(q,t)){setSeg(q,t,v);draw()}}
+    else{const{q,name}=drag,rg=bpRange(q),v=Math.min(rg.max,Math.max(rg.min,snapBp(q,drag.v0+dx)));
+      if(v!==st.POS[q][name]||!drag.moved){const cur=posOf(q,name)-HID-req(q).tools;if(v!==cur){drag.moved=true;st.POS[q][name]=v;draw()}}}}
+  const startDrag=(d,ev,bar)=>{ev.preventDefault();drag=Object.assign({x0:ev.clientX,w:bar.getBoundingClientRect().width},d);
+    window.addEventListener('pointermove',mv);window.addEventListener('pointerup',endDrag);window.addEventListener('pointercancel',endDrag)};
+
+  const root=el('div','pxbk');r.append(root);
+  function draw(){
+    root.innerHTML='';const early=st.gen==='early';const k=calc();
+    /* toolbar */
+    const tb=el('div','pxbk-tb');
+    const g1=el('div','pxbk-grp');g1.append(el('span','pxbk-gl','Model generation'));
+    const seg=el('div','pxbk-seg2');
+    [['Earlier models','early'],['GPT-5.6+','new']].forEach(([t,v])=>{const a=el('button',st.gen===v?'on':'',t);a.onclick=()=>{st.gen=v;draw()};seg.append(a)});
+    g1.append(seg);
+    const g2=el('div','pxbk-grp');g2.append(el('span','pxbk-gl','Caching mode'));
+    const chip=(t,on,dis,tip,fn)=>{const b=el('button','pxbk-chip'+(on?' on':'')+(dis?' dis':''),(on?'✓ ':'')+t);b.title=tip;b.disabled=dis;b.onclick=fn;return b};
+    g2.append(chip('Implicit',early||st.mode==='implicit',early||!st.expl,'The system places a breakpoint at the end of the latest user message',()=>{if(st.mode==='implicit'){if(st.expl)st.mode='explicit'}else{st.mode='implicit';[1,2].forEach(q=>st.BP[q]=st.BP[q].slice(0,3))}draw()}),
+              chip('Explicit',!early&&st.expl,early||st.mode==='explicit',early?'Earlier models have no manual breakpoints':'You place breakpoints yourself',()=>{if(!(st.expl&&st.mode==='explicit'))st.expl=!st.expl;draw()}));
+    const rs=el('button','pxbk-reset','↺ Reset');rs.onclick=()=>{Object.assign(st,{gen:'new',mode:'implicit',expl:false,leg:1024},def());st._pv=null;draw()};
+    const g3=el('div','pxbk-grp');
+    if(early){g3.append(el('span','pxbk-gl','Checkpoint spacing'));const sg=el('div','pxbk-seg2');
+      [[512,'512'],[1024,'1,024'],[2048,'2,048']].forEach(([v,t])=>{const a=el('button',st.leg===v?'on':'',t);a.title=v===1024?'Spacing used by the official simulator (illustrative)':v===2048?'The guide gives GPT-5.5 a breakpoint every 2,048 tokens':'Illustrative, finer spacing';a.onclick=()=>{st.leg=v;draw()};sg.append(a)});g3.append(sg)}
+    tb.append(g1,g2);if(early)tb.append(g3);tb.append(rs);root.append(tb);
+    const ht=(early?`Cache breakpoint spacing is illustrative and varies by model (the guide gives GPT-5.5 one every 2,048 tokens). Spacing now: every ${fmt(st.leg)} tokens, with ${fmt(MINP)} visible tokens as the minimum.`:st.expl?`Select up to ${limit()} manual breakpoints per request. Select triangles at eligible content-block boundaries; drag a ▼ to move it, click it to remove it.`:'Implicit breakpoint: placed at the end of the latest eligible message (here the last user message). When request 2 looks up the cache it also checks earlier message endings, shown as dotted lines.')+' Drag ⋮ to resize a block.';
+    root.append(el('div','pxbk-help',ht));
+    /* plot */
+    const plot=el('div','pxbk-plot'),pw=el('div','pxbk-pw');plot.append(pw);
+    const mp=MINPOS();
+    pw.append(el('div','pxbk-min',`<span>Minimum cacheable length (varies by model)</span>`,{left:pct(mp)}));
+    [1,2].forEach(q=>{
+      const u=q===1?k.u1:k.u2,total=END(q);
+      const row=el('div','pxbk-row');
+      row.append(el('div','pxbk-rh',`<b>Request ${q}</b><span>${fmt(u.n)} input tokens</span>`));
+      const tri=el('div','pxbk-tri');
+      const btnAt=new Set();
+      const sOf=x=>q===1&&k.R1.includes(x)&&st.gen==='new'?(x===k.phys?'hit':(x<=k.T&&!k.o.has(x)?'un':(x>k.T?'bey':''))):'';
+      const sTip=x=>({hit:' · read by request 2',un:' · written, but request 2 never looks here',bey:' · beyond the shared prefix'}[sOf(x)]||'');
+      if(showTri(q))NAMES.forEach(name=>{
+        const x=posOf(q,name),sel=st.BP[q].includes(name),full=!sel&&st.BP[q].length>=limit();
+        if(sel)btnAt.add(x);
+        const b=el('button','pxbk-t'+(sel?' on':'')+(full?' off':'')+(sel?' '+sOf(x):''),sel?'▼':'▽',{left:`min(${x/CAP*100}%, calc(100% - 2px))`});
+        b.title=sel?'Drag to move the explicit breakpoint, or click to remove it'+sTip(x):(full?'Breakpoint limit reached':`Add an explicit breakpoint (${SLOT[name]})`);
+        b.disabled=full;
+        if(sel){b.onpointerdown=ev=>{startDrag({kind:'bp',q,name,v0:x-HID-req(q).tools,moved:false},ev,bar)}}
+        else b.onclick=()=>{if(st.BP[q].length<limit()){st.BP[q].push(name);draw()}};
+        tri.append(b)});
+      if(early)u.bp.forEach(x=>tri.append(el('span','pxbk-cp'+(q===2&&x===u.phys?' hot':''),'▼',{left:`min(${x/CAP*100}%, calc(100% - 2px))`})));
+      row.append(tri);
+      const bar=el('div','pxbk-bar');
+      let acc=0;
+      segs(q).forEach(s=>{const a=acc;acc+=s.n;
+        const lab=s.k==='hid'?`<b>${fmt(s.n)} tokens</b><small>hidden · illustrative</small>`:
+          s.n>=1800?`<b>${{tool:'Tools',dev:'Developer',hist:(q===2?'User history':'User'),fu:'Follow-up'}[s.k]}</b><small>${fmt(s.n)}</small>`:s.n>=900?`<b>${{tool:'Tools',dev:'Dev',hist:'User',fu:'Follow-up'}[s.k]}</b>`:'';
+        const d=el('div','pxbk-seg'+(s.k==='hid'?' pxbk-hid':''),lab,{left:pct(a),width:pct(s.n)});if(s.k!=='hid')d.style.background=COL[s.k];bar.append(d)});
+      /* breakpoint markers */
+      u.bp.forEach(x=>{const impl=!btnAt.has(x)&&st.gen==='new';
+        const m=el('span','pxbk-mk'+(st.gen==='early'?' lg':'')+(x===u.phys&&q===2?' hot':'')+(sOf(x)?' '+sOf(x):''),'',{left:`min(${x/CAP*100}%, calc(100% - 2px))`});
+        if(impl){m.append(el('i','',''));m.title='Implicit breakpoint: end of the latest message'+sTip(x)}bar.append(m)});
+      if(q===2&&st.gen==='new'&&st.mode==='implicit'){[HID+st.B.tools+st.B.developer,HID+st.B.tools+st.B.developer+st.H].forEach((x,i)=>{
+          const m=el('span','pxbk-lk','',{left:`min(${x/CAP*100}%, calc(100% - 2px))`});m.title=i?'Lookup candidate: end of the earlier user message':'Lookup candidate: end of the initial developer block';bar.append(m)})}
+      if(q===2){const ph=u.phys||0,pv=st._pv||{},pp=pv.he!=null?pv.he:ph,pt=pv.tot!=null?pv.tot:total;
+        const hit=el('div','pxbk-ov hit','',{left:'0%',width:pct(pp),opacity:pp?1:0});
+        const miss=el('div','pxbk-ov miss','',{left:pct(pp),width:pct(pt-pp)});
+        bar.append(hit,miss);
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{hit.style.width=pct(ph);hit.style.opacity=ph?1:0;miss.style.left=pct(ph);miss.style.width=pct(total-ph)}));
+        st._pv={he:ph,tot:total}}
+      /* resize handles */
+      let pos=0;segs(q).forEach(s=>{pos+=s.n;if(!s.id)return;
+        const h=el('button','pxbk-h','⋮',{left:`min(${pos/CAP*100}%, calc(100% - 6px))`});
+        h.title=`Drag to resize ${s.id==='history'?'user history':s.id} content`;
+        h.onpointerdown=ev=>startDrag({kind:'seg',q,t:s.id,v0:val(q,s.id)},ev,bar);bar.append(h)});
+      row.append(bar);pw.append(row);
+    });
+    const ax=el('div','pxbk-ax');for(let x=0;x<=CAP;x+=2500)ax.append(el('span','',x?(x/1000)+'k':'0',{left:pct(x)}));
+    pw.append(ax,el('div','pxbk-axl','Input tokens (including illustrative hidden tokens)'));
+    const lg=el('div','pxbk-lg');
+    [['Hidden system','#eee'],['Tools',COL.tool],['Developer',COL.dev],['Context history',COL.hist],['Follow-up',COL.fu]].forEach(([t,c])=>lg.append(el('span','',`<i style="background:${c}"></i>${t}`)));
+    lg.append(el('span','',`<i class="pxbk-lc"></i>Cached input`),el('span','',`<i class="pxbk-lu"></i>Uncached input`));
+    if(!early)lg.append(el('span','','<i class="pxbk-lun"></i>written, not read'),el('span','','<b style="color:#d97706">▼</b> implicit breakpoint'),el('span','',st.mode==='implicit'?'<i class="pxbk-lkk"></i>lookup candidate':''));
+    plot.append(lg);root.append(plot);
+    /* calculation (shown only on a hit, like the guide) + one-line reading */
+    const res=el('div','pxbk-res');
+    const box=(v,l,cls)=>`<div class="pxbk-bx${cls?' '+cls:''}"><b>${v}</b><small>${l}</small></div>`;
+    if(k.phys>0){const cust=k.phys-HID;
+      res.append(el('div','pxbk-eq','',{}));
+      res.lastChild.innerHTML=box(fmt(k.phys),'Last matched breakpoint')+'<span>−</span>'+box(fmt(HID),'Hidden tokens')+'<span>=</span>'+(early?box(fmt(cust),'Customer tokens')+'<span class="pxbk-rd">round down<br>to a multiple of 128 →</span>':'')+box(fmt(k.u2.cached),'Reported cached tokens','fin');}
+    let msg;
+    if(k.phys>0)msg=`Request 2 reads the cache up to ${fmt(k.phys)}; everything after it is ordinary input${k.u2.write?`, and ${fmt(k.u2.write)} tokens are written for next time`:''}.`;
+    else if(!k.R1.length)msg='Request 1 has no breakpoint, so nothing is written and request 2 has nothing to hit.';
+    else if(k.R1.some(x=>x<=sharedEnd())){const inSh=k.R1.filter(x=>x<=sharedEnd());
+      msg=`Request 1 wrote ${inSh.length>1?'breakpoints':'a breakpoint'} at ${inSh.map(fmt).join(' and ')}, inside the part both requests share (up to ${fmt(sharedEnd())}). The content there is identical, but request 2 has no breakpoint at ${inSh.length>1?'those positions':'that position'}, so it never looks ${inSh.length>1?'them':'it'} up. A cache entry is only read at positions the request itself asks about.`+(st.expl?' Drag a ▼ in request 2 onto the same position.':'');}
+    else if(sharedEnd()<END(1))msg=`The two requests only share their first ${fmt(sharedEnd()-HID)} tokens (up to ${fmt(sharedEnd())}), and no breakpoint written by request 1 falls inside that shared part, so request 2 misses. Edit request 1 instead and request 2 stays in sync.`;
+    else msg=early?'No checkpoint inside the shared prefix reaches the minimum cacheable length.':'Request 1 wrote the cache, but request 2 has no breakpoint at a written position, so it misses. A shared prefix is not automatically a cached prefix.';
+    res.append(el('div','pxbk-msg',msg));
+    if(!early){
+      const why=x=>{if(st.expl&&st.BP[2].slice(0,limit()).some(n=>posOf(2,n)===x))return 'it has its own explicit breakpoint here';
+        if(st.mode==='implicit'){if(x===END(2))return 'its implicit breakpoint is here (end of its latest message)';
+          if(x===HID+st.B.tools+st.B.developer)return 'implicit lookup: end of the initial developer block';
+          if(x===HID+st.B.tools+st.B.developer+st.H)return 'implicit lookup: end of an earlier message'}return ''};
+      const rows=k.R1.map(x=>{const sh=x<=k.T,ask=k.o.has(x),all=sh&&ask,cls=all?(x===k.phys?'ok':'also'):'no';
+        const c2=sh?`✓ the content before it is identical (the requests share their first ${fmt(k.T)} tokens)`:`✗ it lies beyond where the requests diverge (they share only the first ${fmt(k.T)} tokens)`;
+        const c3=ask?`✓ request 2 looks up here (${why(x)||'a lookup position'})`:`✗ request 2 does not look up here (no breakpoint of its own at this position${st.mode==='implicit'?', and it is not an implicit lookup position':''})`;
+        return `<tr class="${cls}"><td><b>${fmt(x)}</b></td><td>${c2}</td><td>${c3}</td><td>${all?(x===k.phys?'read':'valid, but a later one is used'):'skipped'}</td></tr>`}).join('');
+      res.append(el('div','pxbk-chk',`<div class="pxbk-ct">Hit check · request 1 wrote these positions; request 2 reads one only if both tests pass</div>`+(rows?`<table><thead><tr><th>Position</th><th>Test 1 · same content up to here?</th><th>Test 2 · does request 2 look here?</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="pxbk-cn">Request 1 has no breakpoint, so nothing was written.</div>')))}
+    /* lookup rules: written out, plus the positions request 2 looks at right now */
+    const rl=el('div','pxbk-rules');
+    if(early){rl.innerHTML=`<div class="pxbk-ct">Lookup rules · earlier models</div><ul><li>No manual breakpoints: the system places checkpoints at model-dependent intervals (drawn every ${fmt(st.leg)} tokens here; change it with the spacing control).</li><li>Request 2 reads the last checkpoint that lies inside the shared prefix and is at least ${fmt(MINP)} visible tokens in; the reported count is rounded down to a multiple of 128.</li></ul>`}
+    else{
+      const B2=st.B,lk=new Map(),add=(x,s)=>{if(x-HID<MINP)return;lk.set(x,(lk.get(x)||[]).concat(s))};
+      if(st.expl)st.BP[2].slice(0,limit()).forEach(n=>add(posOf(2,n),'its explicit breakpoint'));
+      if(st.mode==='implicit'){add(END(2),'its implicit breakpoint (end of its latest message)');add(HID+B2.tools+B2.developer,'end of the initial developer block');add(HID+B2.tools+B2.developer+st.H,'end of an earlier message')}
+      const chips=[...lk.entries()].sort((p,q)=>p[0]-q[0]).map(([x,s])=>`<span class="pxbk-lkc"><b>${fmt(x)}</b> ${s.join(' + ')}</span>`).join('');
+      rl.innerHTML=`<div class="pxbk-ct">Lookup rules · GPT-5.6+ (from the official guide)</div><ul>
+        <li><b>Explicit breakpoints</b>: a request looks up its own first 2 and its latest 50 explicit breakpoints.</li>
+        <li><b>With Implicit on</b>, it also looks up: its own implicit breakpoint (end of its latest message), up to 20 earlier message endings, and the end of the initial developer block.</li>
+        <li>Nothing else is searched (my reading: the guide lists only these lookup positions). A shared prefix that ends between them is not read.</li>
+        <li>Among the positions that match, the longest one is used. A position must be at least 1,024 visible tokens in.</li></ul>
+        <div class="pxbk-ct" style="margin-top:8px">Request 2 looks up these positions right now</div><div>${chips||'<span class="pxbk-cn">none: explicit-only with no breakpoint, so nothing is looked up</span>'}</div>`}
+    res.append(rl);
+    root.append(res);
+    /* request + usage panels (side by side) */
+    const det=document.createElement('details');det.className='pxbk-det';det.append(el('summary','','Request parameters and response usage'));
+    const secs=(q,len,start,names)=>{if(len===0)return[{type:'input_text',text:'0 tokens'}];
+      const a=new Set(names.map(n=>posOf(q,n)-start)),o=[...new Set([len,...a])].filter(x=>x>0&&x<=len).sort((x,y)=>x-y);let c=0;
+      return o.map((x,i)=>{const t=fmt(x-c);c=x;const p={type:'input_text',text:o.length>1?`Section ${i+1}, ${t} tokens`:`${t} tokens`};if(a.has(x))p.prompt_cache_breakpoint={mode:'explicit'};return p})};
+    const reqJson=q=>{const a=req(q),hs=q===2?st.H:st.A.user,o=HID+a.tools,s=o+a.developer,c=s+hs;
+      const ex=(st.gen==='new'&&st.expl)?st.BP[q].slice(0,limit()):[];
+      const inR=(lo,len)=>ex.filter(n=>{const p=posOf(q,n);return p-HID>=MINP&&p>lo&&p<=lo+len});
+      const inp=[{role:'developer',content:secs(q,a.developer,o,inR(o,a.developer))},{role:'user',content:secs(q,hs,HID+a.developer+a.tools,inR(s,hs))}];
+      if(q===2)inp.push({role:'user',content:secs(q,a.user,c,inR(c,a.user))});
+      const j={model:st.gen==='new'?'gpt-5.6':'gpt-5.4',reasoning:{effort:'medium',context:st.gen==='new'?'all_turns':'current_turn'},text:{verbosity:'medium'},input:inp,tools:[`Tool definitions, ${fmt(a.tools)} tokens`],prompt_cache_key:'shared-workflow-v1'};
+      if(st.gen==='new')j.prompt_cache_options={mode:st.mode,ttl:'30m'};return JSON.stringify(j,null,2)};
+    const usageJson=q=>{const u=q===1?k.u1:k.u2;return JSON.stringify({usage:{input_tokens:u.n,input_tokens_details:early?{cached_tokens:u.cached}:{cached_tokens:u.cached,cache_write_tokens:u.write}}},null,2)};
+    const grid=el('div','pxbk-grid2');
+    const pre=(t,s)=>{const d=el('div','pxbk-pre');d.append(el('small','',t));const p=document.createElement('pre');p.textContent=s;d.append(p);return d};
+    [1,2].forEach(q=>grid.append(pre(`Request ${q} · Responses API request`,reqJson(q))));
+    [1,2].forEach(q=>grid.append(pre(`Request ${q} · Response usage`,usageJson(q))));
+    det.append(grid,el('div','pxbk-note','Illustrative numbers and positions. Field names follow the official guide (Responses API); this is a re-implementation, not the official simulator.'));
+    root.append(det);
+  }
+  draw();
+  r._f={play:null,final:()=>{Object.assign(st,{gen:'new',mode:'implicit',expl:false,leg:1024},def());st._pv=null;draw()}};
+};
+
+/* boot */
+document.querySelectorAll('.fig[data-fig]').forEach(r=>{const f=FIGS[r.dataset.fig];if(f)f(r)});
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&!e.target._seen&&!window.FROZEN){e.target._seen=1;e.target._f&&e.target._f.play&&e.target._f.play()}}),{threshold:.45});
+document.querySelectorAll('.fig').forEach(r=>io.observe(r));
+window.renderFinal=()=>{window.FROZEN=true;document.body.classList.add('static');document.querySelectorAll('.fig').forEach(r=>r._f&&r._f.final&&r._f.final())};
+
+/* figure-only mode: ...html#only-<id> shows just that figure (used for per-figure embeds in notes) */
+(function(){const m=location.hash.match(/^#only-(\w+)/);if(!m)return;const id=m[1];
+  document.body.classList.add('only');
+  document.querySelectorAll('.wrap > *').forEach(e=>{if(e.id!=='fig-'+id)e.style.display='none'});
+  const f=document.getElementById('fig-'+id);if(f){f.style.margin='0 auto';f.style.padding='8px 0'}
+  document.querySelector('.wrap').style.padding='0';
+  setTimeout(()=>{f&&f._f&&f._f.play&&f._f.play()},250)})();
+</script></body></html>
