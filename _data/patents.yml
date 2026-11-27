@@ -1,0 +1,94 @@
+# Chinese invention patents. Titles, numbers and dates are from the CNIPA certificates and the public
+# records on Google Patents. Internal Tencent IDs (腾讯号, 立项编号) must not appear here.
+# status: granted | published (application public, under examination) | pending (filed, not yet public)
+
+- status: pending
+  filed: 2026-03-01
+  title_zh: 面向游戏数据场景的多模态路由多智能体系统及方法
+  title_en: A multimodal-routing multi-agent system and method for game data
+  assignee_zh: 腾讯
+  assignee_en: Tencent
+
+- number: CN 121257528 A
+  url: https://patents.google.com/patent/CN121257528A/zh
+  status: published
+  filed: 2024-06-28
+  date: 2026-01-02
+  title_zh: 话题添加方法、装置、设备、介质和程序产品
+  title_en: Topic tagging method, apparatus, device, medium and program product
+  inventors_zh: [黄东晓, 刘文强, 韩可心]
+  inventors_en: [Dongxiao Huang, Wenqiang Liu, Kexin Han]
+  assignee_zh: 腾讯科技（深圳）有限公司
+  assignee_en: Tencent
+
+- number: CN 117009892 B
+  url: https://patents.google.com/patent/CN117009892B/zh
+  status: granted
+  filed: 2022-07-29
+  date: 2025-10-03
+  title_zh: 实体识别模型的训练方法、装置、设备及介质
+  title_en: Training method, apparatus, device and medium for an entity recognition model
+  inventors_zh: [黄东晓, 刘文强, 蒋益巧]
+  inventors_en: [Dongxiao Huang, Wenqiang Liu, Yiqiao Jiang]
+  assignee_zh: 深圳市腾讯信息技术有限公司
+  assignee_en: Tencent
+
+- number: CN 120277176 A
+  url: https://patents.google.com/patent/CN120277176A/zh
+  status: published
+  filed: 2024-01-03
+  date: 2025-07-08
+  title_zh: 数据查询方法、装置、电子设备及存储介质
+  title_en: Data query method, apparatus, electronic device and storage medium
+  inventors_zh: [黄东晓, 殷志贤, 朱东哲, 刘文强, 郎君, 李昊, 黄裕城, 廖安, 陈晓鑫]
+  inventors_en: [Dongxiao Huang, Zhixian Yin, Dongzhe Zhu, Wenqiang Liu, Jun Lang, Hao Li, Yucheng Huang, An Liao, Xiaoxin Chen]
+  assignee_zh: 腾讯科技（深圳）有限公司等
+  assignee_en: Tencent and others
+
+- number: CN 117216184 A
+  url: https://patents.google.com/patent/CN117216184A/zh
+  status: published
+  filed: 2023-05-26
+  date: 2023-12-12
+  title_zh: 评论处理方法、装置、电子设备、存储介质以及程序产品
+  title_en: Review processing method, apparatus, electronic device, storage medium and program product
+  inventors_zh: [黄东晓, 刘文强, 李昊, 郎君]
+  inventors_en: [Dongxiao Huang, Wenqiang Liu, Hao Li, Jun Lang]
+  assignee_zh: 腾讯科技（深圳）有限公司
+  assignee_en: Tencent
+
+- number: CN 116966584 A
+  url: https://patents.google.com/patent/CN116966584A/zh
+  status: published
+  filed: 2022-12-08
+  date: 2023-10-31
+  title_zh: 针对游戏实体的处理方法、装置、电子设备及存储介质
+  title_en: Processing method, apparatus, electronic device and storage medium for game entities
+  inventors_zh: [蒋益巧, 刘文强, 韩可心, 黄东晓]
+  inventors_en: [Yiqiao Jiang, Wenqiang Liu, Kexin Han, Dongxiao Huang]
+  assignee_zh: 腾讯科技（深圳）有限公司
+  assignee_en: Tencent
+
+- number: CN 116861242 A
+  url: https://patents.google.com/patent/CN116861242A/zh
+  status: published
+  filed: 2023-07-12
+  date: 2023-10-10
+  title_zh: 基于语言判别提示的语言感知多语言预训练与微调方法
+  title_en: Language-aware multilingual pre-training and fine-tuning based on language discriminative prompts
+  inventors_zh: [郑海涛, 吕传承, 蔡沛东, 丁宁, 刘文强, 吴蓓, 黄东晓]
+  inventors_en: [Hai-Tao Zheng, Chuancheng Lv, Peidong Cai, Ning Ding, Wenqiang Liu, Bei Wu, Dongxiao Huang]
+  assignee_zh: 清华大学深圳国际研究生院等
+  assignee_en: Tsinghua Shenzhen International Graduate School and others
+
+- number: CN 114330353 B
+  url: https://patents.google.com/patent/CN114330353B/zh
+  status: granted
+  filed: 2022-01-06
+  date: 2023-06-13
+  title_zh: 虚拟场景的实体识别方法、装置、设备、介质及程序产品
+  title_en: Entity recognition method, apparatus, device, medium and program product for virtual scenes
+  inventors_zh: [桑健顺, 吴蓓, 蒋益巧, 郭豪, 黄东晓, 刘文强]
+  inventors_en: [Jianshun Sang, Bei Wu, Yiqiao Jiang, Hao Guo, Dongxiao Huang, Wenqiang Liu]
+  assignee_zh: 腾讯科技（深圳）有限公司
+  assignee_en: Tencent

@@ -420,9 +420,154 @@ article img,
   }
 }
 
-.publications ol.bibliography li .abbr abbr {
-  font-weight: 600;
-  letter-spacing: 0.02em;
+// Publications: thumbnail column on the left, entry on the right, quiet venue labels.
+.publications {
+  margin-top: 1rem;
+
+  h2.pub-section {
+    font-size: 1.35rem;
+    font-weight: 400;
+    margin: 2.5rem 0 0;
+  }
+
+  h2.bibliography {
+    color: var(--global-text-color-light);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: left;
+    margin: 1.25rem 0 1rem;
+    padding-top: 0.75rem;
+  }
+
+  ol.patents {
+    margin-top: 1.25rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--global-divider-color);
+  }
+
+  ol.bibliography li {
+    margin-bottom: 2rem;
+
+    > .row {
+      flex-wrap: nowrap;
+      margin: 0;
+      gap: 1.5rem;
+
+      > div {
+        padding: 0;
+      }
+
+      > div:not(.abbr) {
+        flex: 1 1 auto;
+        max-width: none;
+      }
+    }
+
+    .abbr {
+      flex: 0 0 190px;
+      max-width: 190px;
+      margin: 0;
+
+      abbr.badge {
+        display: block;
+        margin: 0 0 0.4rem;
+        padding: 0;
+        background: transparent !important;
+        color: var(--global-text-color-light) !important;
+        text-align: left;
+        font-size: 0.75rem;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+
+        a,
+        div {
+          color: inherit;
+        }
+      }
+
+      figure {
+        margin: 0;
+      }
+
+      .preview {
+        display: block;
+        width: 100%;
+        height: 110px;
+        object-fit: contain;
+        padding: 6px;
+        background: #fff;
+        border: 1px solid var(--global-divider-color);
+        border-radius: 6px;
+        box-shadow: none;
+      }
+    }
+
+    .title {
+      font-weight: 500;
+      font-size: 1rem;
+      line-height: 1.4;
+      margin-bottom: 0.2rem;
+    }
+
+    .patent-meta {
+      margin-top: 0.15rem;
+
+      .sep {
+        margin: 0 0.45rem;
+        color: var(--global-text-color-light);
+        opacity: 0.6;
+      }
+    }
+
+    .patent-year {
+      display: block;
+      margin-bottom: 0.35rem;
+      color: var(--global-text-color-light);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+
+    .author,
+    .periodical {
+      color: var(--global-text-color-light);
+      line-height: 1.5;
+    }
+
+    .author > em {
+      color: var(--global-text-color);
+    }
+
+    .links {
+      margin-top: 0.4rem;
+
+      a.btn {
+        font-size: 0.72rem;
+        padding: 0.1rem 0.6rem;
+        border-color: var(--global-divider-color);
+        border-radius: 4px;
+        margin: 0 0.3rem 0 0;
+      }
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    ol.bibliography li > .row {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    ol.bibliography li .abbr {
+      flex-basis: 100%;
+      max-width: 100%;
+
+      .preview {
+        height: 150px;
+      }
+    }
+  }
 }
 
 html[data-theme="dark"] {

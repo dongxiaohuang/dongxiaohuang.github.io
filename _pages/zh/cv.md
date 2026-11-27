@@ -44,9 +44,9 @@ nav: false
 **分享：Data-Driven Game Publishing，Kingston University** · 2026.10.07<br>
 腾讯校园宣讲期间的分享：数据如何影响游戏发行决策，AI agent 如何让数据更好用，以 PEAK 为例演示 DataBrain。
 
-## 论文
+## 论文与专利
 
-论文列表见[论文]({{ '/zh/publications/' | relative_url }})页。
+论文和专利见[研究]({{ '/zh/publications/' | relative_url }})页。
 
 ## 技能
 

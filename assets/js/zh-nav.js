@@ -4,7 +4,7 @@
   if (location.pathname.indexOf("/zh/") !== 0) return;
   var map = {
     "/": ["/zh/", "关于"],
-    "/publications/": ["/zh/publications/", "论文"],
+    "/publications/": ["/zh/publications/", "研究"],
     "/projects/": ["/zh/projects/", "项目"],
     "/blog/": ["/zh/blog/", "博客"],
     "/cv/": ["/zh/cv/", "简历"],
